@@ -39,8 +39,8 @@ jobs:
             exit 1
           fi
 
-          cargo_version="$(nix develop -c cargo pkgid -p pkl-lsp-server | awk -F'[#@]' '{print $NF}')"
-          extension_version="$(nix develop -c node -e "console.log(require('./pkl-lsp-vscode/package.json').version)")"
+          cargo_version="$(nix develop -c cargo pkgid -p pkl-lsp-server | awk -F'[#@]' '/pkl-lsp-server/ { version = $NF } END { print version }')"
+          extension_version="$(nix develop -c node -e "console.log(require('./pkl-lsp-vscode/package.json').version)" | tail -n 1)"
           if [ "$tag" != "$cargo_version" ]; then
             echo "Tag $tag does not match Cargo package version $cargo_version" >&2
             exit 1
