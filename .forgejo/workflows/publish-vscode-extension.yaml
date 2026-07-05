@@ -74,6 +74,8 @@ jobs:
       - name: TypeScript compile
         run: |
           set -euo pipefail
+          nix develop -c wasm-pack build crates/pkl-lsp-wasm --target web --out-dir ../../pkl-lsp-vscode/media --no-opt
+          nix develop -c wasm-opt --enable-bulk-memory -Oz pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm -o pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm
           cd pkl-lsp-vscode
           nix develop -c npm ci
           nix develop -c npm run compile
