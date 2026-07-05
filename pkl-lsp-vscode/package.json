@@ -1,0 +1,92 @@
+{
+  "name": "pkl-lsp",
+  "displayName": "PKL LSP",
+  "description": "Rust-backed language support for PKL",
+  "version": "0.1.0",
+  "publisher": "caniko",
+  "icon": "resources/icon.png",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "ssh://git@codeberg.org/caniko/pkl-lsp.git"
+  },
+  "homepage": "https://codeberg.org/caniko/pkl-lsp",
+  "bugs": {
+    "url": "https://codeberg.org/caniko/pkl-lsp/issues"
+  },
+  "qna": "https://codeberg.org/caniko/pkl-lsp/issues",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "pkl",
+    "apple pkl",
+    "language server",
+    "lsp",
+    "codium",
+    "configuration"
+  ],
+  "galleryBanner": {
+    "color": "#1f2937",
+    "theme": "dark"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onLanguage:pkl"
+  ],
+  "main": "./out/extension.js",
+  "browser": "./out/webExtension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "pkl",
+        "aliases": [
+          "PKL",
+          "pkl"
+        ],
+        "extensions": [
+          ".pkl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pkl",
+        "scopeName": "source.pkl",
+        "path": "./syntaxes/pkl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "PKL LSP",
+      "properties": {
+        "pklLsp.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a pkl-lsp native server binary. When unset, the extension uses the bundled binary for the current platform."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "package": "vsce package --no-dependencies",
+    "package:linux-x64": "vsce package --no-dependencies --target linux-x64",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.92.0",
+    "ovsx": "^1.0.2",
+    "@vscode/vsce": "^2.32.0",
+    "typescript": "^5.5.0"
+  }
+}

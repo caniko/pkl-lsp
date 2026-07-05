@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "PKL",
+  "scopeName": "source.pkl",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.pkl", "match": "//.*$" },
+        { "name": "comment.block.pkl", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.double.pkl", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.pkl", "match": "\\\\." }] }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.pkl", "match": "\\b(amends|as|class|const|else|extends|external|fixed|for|function|hidden|if|import\\*?|in|is|let|local|module|new|open|out|read\\??|super|this|throw|trace|typealias|when)\\b" },
+        { "name": "constant.language.pkl", "match": "\\b(true|false|null)\\b" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.pkl", "match": "\\b[0-9]+(\\.[0-9]+)?\\b" }
+      ]
+    }
+  }
+}
+

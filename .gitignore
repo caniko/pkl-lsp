@@ -1,0 +1,12 @@
+/target
+/result
+/result-*
+/node_modules
+/pkl-lsp-vscode/node_modules
+/pkl-lsp-vscode/out
+/pkl-lsp-vscode/dist
+/pkl-lsp-vscode/media
+/pkl-lsp-vscode/bin
+/pkl-lsp-vscode/*.vsix
+/.direnv
+/.pre-commit-config.yaml
