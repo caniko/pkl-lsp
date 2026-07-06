@@ -1009,7 +1009,6 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 name = "pkl-lsp-core"
 version = "0.1.0"
 dependencies = [
- "lsp-types",
  "pklr",
  "rkyv",
  "serde",
@@ -1035,7 +1034,6 @@ name = "pkl-lsp-wasm"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
- "lsp-types",
  "pkl-lsp-core",
  "serde_json",
  "wasm-bindgen",

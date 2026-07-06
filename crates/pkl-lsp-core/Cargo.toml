@@ -9,7 +9,6 @@ homepage.workspace = true
 description = "Core PKL language analysis for pkl-lsp"
 
 [dependencies]
-lsp-types.workspace = true
 pklr.workspace = true
 rkyv.workspace = true
 serde.workspace = true

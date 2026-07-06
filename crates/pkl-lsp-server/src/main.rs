@@ -3,13 +3,18 @@ use std::sync::Arc;
 
 use clap::Parser;
 use lsp_types::{
-    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
-    DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
-    InitializeParams, InitializeResult, Location, OneOf, ReferenceParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkDoneProgressOptions,
+    CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
+    Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+    InitializeParams, InitializeResult, Location, MarkedString, OneOf, Position, Range,
+    ReferenceParams, ServerCapabilities, SymbolKind, TextDocumentSyncCapability,
+    TextDocumentSyncKind, Url, WorkDoneProgressOptions,
 };
-use pkl_lsp_core::{CompletionOptions as CoreCompletionOptions, DocumentStore, FeatureEngine};
+use pkl_lsp_core::{
+    CompletionList, CompletionOptions as CoreCompletionOptions, DocumentStore, FeatureEngine,
+    TextPosition, TextRange,
+};
 use tokio::sync::Mutex;
 use tower_lsp::{Client, LanguageServer, LspService, Server, jsonrpc::Result as RpcResult};
 
@@ -37,7 +42,14 @@ impl Backend {
 
     async fn publish(&self, uri: &Url) {
         let uri_string = uri.to_string();
-        let diagnostics = self.engine.lock().await.publish_diagnostics(&uri_string);
+        let diagnostics = self
+            .engine
+            .lock()
+            .await
+            .publish_diagnostics(&uri_string)
+            .into_iter()
+            .map(core_diagnostic_to_lsp)
+            .collect();
         self.client
             .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
@@ -134,51 +146,60 @@ impl LanguageServer for Backend {
             .engine
             .lock()
             .await
-            .document_symbols(params.text_document.uri.as_ref());
+            .document_symbols(params.text_document.uri.as_ref())
+            .into_iter()
+            .map(core_document_symbol_to_lsp)
+            .collect();
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 
     async fn hover(&self, params: HoverParams) -> RpcResult<Option<Hover>> {
-        Ok(self.engine.lock().await.hover(
-            params
-                .text_document_position_params
-                .text_document
-                .uri
-                .as_ref(),
-            params.text_document_position_params.position,
-        ))
+        Ok(self
+            .engine
+            .lock()
+            .await
+            .hover(
+                params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .as_ref(),
+                text_position_from_lsp(params.text_document_position_params.position),
+            )
+            .map(core_hover_to_lsp))
     }
 
     async fn completion(&self, params: CompletionParams) -> RpcResult<Option<CompletionResponse>> {
-        Ok(Some(self.engine.lock().await.completion(
+        let completion = self.engine.lock().await.completion(
             params.text_document_position.text_document.uri.as_ref(),
-            params.text_document_position.position,
+            text_position_from_lsp(params.text_document_position.position),
             CoreCompletionOptions {
                 include_keywords: true,
             },
-        )))
+        );
+        Ok(Some(core_completion_to_lsp(completion)))
     }
 
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
     ) -> RpcResult<Option<GotoDefinitionResponse>> {
-        let Some((uri, range)) = self.engine.lock().await.definition(
+        let Some(location) = self.engine.lock().await.definition(
             params
                 .text_document_position_params
                 .text_document
                 .uri
                 .as_ref(),
-            params.text_document_position_params.position,
+            text_position_from_lsp(params.text_document_position_params.position),
         ) else {
             return Ok(None);
         };
-        let Ok(uri) = Url::from_str(&uri) else {
+        let Ok(uri) = Url::from_str(&location.uri) else {
             return Ok(None);
         };
         Ok(Some(GotoDefinitionResponse::Scalar(Location {
             uri,
-            range,
+            range: text_range_to_lsp(location.range),
         })))
     }
 
@@ -189,13 +210,107 @@ impl LanguageServer for Backend {
             .await
             .references(
                 params.text_document_position.text_document.uri.as_ref(),
-                params.text_document_position.position,
+                text_position_from_lsp(params.text_document_position.position),
             )
             .into_iter()
-            .filter_map(|(uri, range)| Url::from_str(&uri).ok().map(|uri| Location { uri, range }))
+            .filter_map(|location| {
+                Url::from_str(&location.uri).ok().map(|uri| Location {
+                    uri,
+                    range: text_range_to_lsp(location.range),
+                })
+            })
             .collect();
         Ok(Some(references))
     }
+}
+
+fn text_position_from_lsp(position: Position) -> TextPosition {
+    TextPosition {
+        line: position.line,
+        character: position.character,
+    }
+}
+
+fn text_position_to_lsp(position: TextPosition) -> Position {
+    Position::new(position.line, position.character)
+}
+
+fn text_range_to_lsp(range: TextRange) -> Range {
+    Range::new(
+        text_position_to_lsp(range.start),
+        text_position_to_lsp(range.end),
+    )
+}
+
+fn core_diagnostic_to_lsp(diagnostic: pkl_lsp_core::Diagnostic) -> Diagnostic {
+    Diagnostic {
+        range: text_range_to_lsp(diagnostic.range),
+        severity: diagnostic.severity.and_then(|severity| match severity {
+            1 => Some(DiagnosticSeverity::ERROR),
+            _ => None,
+        }),
+        source: diagnostic.source,
+        message: diagnostic.message,
+        ..Diagnostic::default()
+    }
+}
+
+#[allow(deprecated)]
+fn core_document_symbol_to_lsp(symbol: pkl_lsp_core::DocumentSymbol) -> DocumentSymbol {
+    DocumentSymbol {
+        name: symbol.name,
+        detail: symbol.detail,
+        kind: match symbol.kind {
+            2 => SymbolKind::MODULE,
+            3 => SymbolKind::NAMESPACE,
+            5 => SymbolKind::CLASS,
+            7 => SymbolKind::PROPERTY,
+            24 => SymbolKind::EVENT,
+            26 => SymbolKind::TYPE_PARAMETER,
+            _ => SymbolKind::VARIABLE,
+        },
+        tags: None,
+        deprecated: None,
+        range: text_range_to_lsp(symbol.range),
+        selection_range: text_range_to_lsp(symbol.selection_range),
+        children: symbol.children.map(|children| {
+            children
+                .into_iter()
+                .map(core_document_symbol_to_lsp)
+                .collect()
+        }),
+    }
+}
+
+fn core_hover_to_lsp(hover: pkl_lsp_core::Hover) -> Hover {
+    Hover {
+        contents: HoverContents::Scalar(MarkedString::String(hover.contents)),
+        range: hover.range.map(text_range_to_lsp),
+    }
+}
+
+fn core_completion_to_lsp(completion: CompletionList) -> CompletionResponse {
+    CompletionResponse::Array(
+        completion
+            .items
+            .into_iter()
+            .map(|item| CompletionItem {
+                label: item.label,
+                kind: item.kind.and_then(|kind| match kind {
+                    7 => Some(CompletionItemKind::CLASS),
+                    9 => Some(CompletionItemKind::MODULE),
+                    10 => Some(CompletionItemKind::PROPERTY),
+                    14 => Some(CompletionItemKind::KEYWORD),
+                    18 => Some(CompletionItemKind::REFERENCE),
+                    25 => Some(CompletionItemKind::TYPE_PARAMETER),
+                    _ => None,
+                }),
+                detail: item.detail,
+                documentation: item.documentation.map(lsp_types::Documentation::String),
+                ..CompletionItem::default()
+            })
+            .collect(),
+    )
 }
 
 #[tokio::main]

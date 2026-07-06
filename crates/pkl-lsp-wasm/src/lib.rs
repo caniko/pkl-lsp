@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 
-use lsp_types::Position;
-use pkl_lsp_core::{CompletionOptions, DocumentStore, FeatureEngine};
+use pkl_lsp_core::{CompletionOptions, DocumentStore, FeatureEngine, TextPosition};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -94,7 +93,7 @@ fn required_string<'a>(params: &'a serde_json::Value, field: &str) -> Result<&'a
         .ok_or_else(|| JsValue::from_str(&format!("missing string field '{field}'")))
 }
 
-fn required_position(params: &serde_json::Value) -> Result<Position, JsValue> {
+fn required_position(params: &serde_json::Value) -> Result<TextPosition, JsValue> {
     let position = params
         .get("position")
         .ok_or_else(|| JsValue::from_str("missing position"))?;
@@ -106,5 +105,8 @@ fn required_position(params: &serde_json::Value) -> Result<Position, JsValue> {
         .get("character")
         .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| JsValue::from_str("missing position.character"))?;
-    Ok(Position::new(line as u32, character as u32))
+    Ok(TextPosition {
+        line: line as u32,
+        character: character as u32,
+    })
 }

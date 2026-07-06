@@ -1,10 +1,8 @@
-use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionResponse, Documentation, Hover, HoverContents,
-    MarkedString, Position, Range,
-};
-
 use crate::document::DocumentStore;
-use crate::index::{PklSymbol, WorkspaceIndex, offset_at_position, word_at_position};
+use crate::index::{
+    PklSymbol, TextPosition, TextRange, WorkspaceIndex, offset_at_position, word_at_position,
+};
+use crate::protocol::{self, CompletionItem, CompletionList, Hover, Location};
 
 const KEYWORDS: &[&str] = &[
     "amends",
@@ -75,15 +73,15 @@ impl FeatureEngine {
         &self.index
     }
 
-    pub fn publish_diagnostics(&self, uri: &str) -> Vec<lsp_types::Diagnostic> {
-        self.index.diagnostics_for_lsp(uri)
+    pub fn publish_diagnostics(&self, uri: &str) -> Vec<protocol::Diagnostic> {
+        self.index.diagnostics_for_protocol(uri)
     }
 
-    pub fn document_symbols(&self, uri: &str) -> Vec<lsp_types::DocumentSymbol> {
+    pub fn document_symbols(&self, uri: &str) -> Vec<protocol::DocumentSymbol> {
         self.index.document_symbols(uri)
     }
 
-    pub fn hover(&self, uri: &str, position: Position) -> Option<Hover> {
+    pub fn hover(&self, uri: &str, position: TextPosition) -> Option<Hover> {
         let symbol = self.symbol_at(uri, position)?;
         let mut value = format!("**{}**", symbol.name);
         if let Some(detail) = &symbol.detail {
@@ -93,58 +91,61 @@ impl FeatureEngine {
             value.push_str(&format!("\n\nContainer: `{container}`"));
         }
         Some(Hover {
-            contents: HoverContents::Scalar(MarkedString::String(value)),
-            range: Some(symbol.selection_range.into()),
+            contents: value,
+            range: Some(symbol.selection_range),
         })
     }
 
     pub fn completion(
         &self,
         uri: &str,
-        _position: Position,
+        _position: TextPosition,
         options: CompletionOptions,
-    ) -> CompletionResponse {
+    ) -> CompletionList {
         let mut items = Vec::new();
         if options.include_keywords {
             items.extend(KEYWORDS.iter().map(|keyword| CompletionItem {
                 label: (*keyword).to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                ..CompletionItem::default()
+                kind: Some(protocol::completion_kind::KEYWORD),
+                detail: None,
+                documentation: None,
             }));
         }
         items.extend(self.index.symbols_in_uri(uri).map(|symbol| {
             CompletionItem {
                 label: symbol.name.clone(),
                 kind: Some(match symbol.kind {
-                    crate::SymbolKind::Module => CompletionItemKind::MODULE,
-                    crate::SymbolKind::Import => CompletionItemKind::MODULE,
-                    crate::SymbolKind::Property => CompletionItemKind::PROPERTY,
-                    crate::SymbolKind::Class => CompletionItemKind::CLASS,
-                    crate::SymbolKind::TypeAlias => CompletionItemKind::TYPE_PARAMETER,
-                    crate::SymbolKind::Annotation => CompletionItemKind::REFERENCE,
+                    crate::SymbolKind::Module => protocol::completion_kind::MODULE,
+                    crate::SymbolKind::Import => protocol::completion_kind::MODULE,
+                    crate::SymbolKind::Property => protocol::completion_kind::PROPERTY,
+                    crate::SymbolKind::Class => protocol::completion_kind::CLASS,
+                    crate::SymbolKind::TypeAlias => protocol::completion_kind::TYPE_PARAMETER,
+                    crate::SymbolKind::Annotation => protocol::completion_kind::REFERENCE,
                 }),
                 detail: symbol.detail.clone(),
                 documentation: symbol
                     .container_name
                     .as_ref()
-                    .map(|container| Documentation::String(format!("Container: {container}"))),
-                ..CompletionItem::default()
+                    .map(|container| format!("Container: {container}")),
             }
         }));
-        CompletionResponse::Array(items)
+        CompletionList { items }
     }
 
-    pub fn definition(&self, uri: &str, position: Position) -> Option<(String, Range)> {
+    pub fn definition(&self, uri: &str, position: TextPosition) -> Option<Location> {
         let document = self.documents.get(uri)?;
         let word = word_at_position(&document.text, position)?;
         self.index
             .symbols
             .iter()
             .find(|symbol| symbol.name.trim_start_matches('@') == word)
-            .map(|symbol| (symbol.uri.clone(), symbol.selection_range.into()))
+            .map(|symbol| Location {
+                uri: symbol.uri.clone(),
+                range: symbol.selection_range,
+            })
     }
 
-    pub fn references(&self, uri: &str, position: Position) -> Vec<(String, Range)> {
+    pub fn references(&self, uri: &str, position: TextPosition) -> Vec<Location> {
         let Some(document) = self.documents.get(uri) else {
             return Vec::new();
         };
@@ -157,7 +158,7 @@ impl FeatureEngine {
             .collect()
     }
 
-    fn symbol_at(&self, uri: &str, position: Position) -> Option<&PklSymbol> {
+    fn symbol_at(&self, uri: &str, position: TextPosition) -> Option<&PklSymbol> {
         let offset = self
             .documents
             .get(uri)
@@ -167,12 +168,12 @@ impl FeatureEngine {
             .filter(|symbol| {
                 range_contains_offset(
                     self.documents.get(uri).unwrap().text.as_str(),
-                    symbol.selection_range.into(),
+                    symbol.selection_range,
                     offset,
                 )
             })
             .min_by_key(|symbol| {
-                let range: Range = symbol.selection_range.into();
+                let range = symbol.selection_range;
                 (
                     range.end.line - range.start.line,
                     range.end.character - range.start.character,
@@ -181,13 +182,13 @@ impl FeatureEngine {
     }
 }
 
-fn range_contains_offset(text: &str, range: Range, offset: usize) -> bool {
+fn range_contains_offset(text: &str, range: TextRange, offset: usize) -> bool {
     let start = offset_at_position(text, range.start);
     let end = offset_at_position(text, range.end);
     start <= offset && offset <= end
 }
 
-fn find_word_ranges(uri: &str, text: &str, word: &str) -> Vec<(String, Range)> {
+fn find_word_ranges(uri: &str, text: &str, word: &str) -> Vec<Location> {
     let mut result = Vec::new();
     let mut start = 0;
     while let Some(idx) = text[start..].find(word) {
@@ -200,10 +201,13 @@ fn find_word_ranges(uri: &str, text: &str, word: &str) -> Vec<(String, Range)> {
         if !before.is_some_and(is_ident_byte) && !after.is_some_and(is_ident_byte) {
             let start_pos = crate::index::position_at_offset(text, absolute);
             let end_pos = crate::index::position_at_offset(text, absolute + word.len());
-            result.push((
-                uri.to_string(),
-                Range::new(start_pos.into(), end_pos.into()),
-            ));
+            result.push(Location {
+                uri: uri.to_string(),
+                range: TextRange {
+                    start: start_pos,
+                    end: end_pos,
+                },
+            });
         }
         start = absolute + word.len();
     }
@@ -216,9 +220,7 @@ fn is_ident_byte(byte: u8) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use lsp_types::Position;
-
-    use crate::{CompletionOptions, DocumentStore, FeatureEngine};
+    use crate::{CompletionOptions, DocumentStore, FeatureEngine, TextPosition};
 
     #[test]
     fn hover_completion_definition_and_references() {
@@ -232,28 +234,46 @@ mod tests {
 
         assert!(
             engine
-                .hover("file:///demo.pkl", Position::new(0, 1))
+                .hover(
+                    "file:///demo.pkl",
+                    TextPosition {
+                        line: 0,
+                        character: 1,
+                    },
+                )
                 .is_some()
         );
         let completion = engine.completion(
             "file:///demo.pkl",
-            Position::new(0, 0),
+            TextPosition {
+                line: 0,
+                character: 0,
+            },
             CompletionOptions {
                 include_keywords: true,
             },
         );
-        let lsp_types::CompletionResponse::Array(items) = completion else {
-            panic!("expected completion array");
-        };
-        assert!(!items.is_empty());
+        assert!(!completion.items.is_empty());
         assert!(
             engine
-                .definition("file:///demo.pkl", Position::new(1, 9))
+                .definition(
+                    "file:///demo.pkl",
+                    TextPosition {
+                        line: 1,
+                        character: 9,
+                    },
+                )
                 .is_some()
         );
         assert_eq!(
             engine
-                .references("file:///demo.pkl", Position::new(1, 9))
+                .references(
+                    "file:///demo.pkl",
+                    TextPosition {
+                        line: 1,
+                        character: 9,
+                    },
+                )
                 .len(),
             2
         );

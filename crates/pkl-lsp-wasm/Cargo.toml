@@ -16,7 +16,6 @@ wasm-opt = false
 
 [dependencies]
 console_error_panic_hook.workspace = true
-lsp-types.workspace = true
 pkl-lsp-core = { path = "../pkl-lsp-core" }
 serde_json.workspace = true
 wasm-bindgen.workspace = true

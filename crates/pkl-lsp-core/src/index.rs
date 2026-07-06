@@ -1,12 +1,11 @@
-use lsp_types::{
-    Diagnostic, DiagnosticSeverity, DocumentSymbol, Position, Range, SymbolKind as LspSymbolKind,
-};
 use pklr::error::Error as PklError;
 use pklr::lexer::{self, Token, TokenKind};
 use pklr::parser::{self, Annotation, Entry, Expr, Import, Module, Property, TypeExpr};
 use rkyv::{Archive, Deserialize, Serialize};
+use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
 use crate::Document;
+use crate::protocol;
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(compare(PartialEq), derive(Debug))]
@@ -26,48 +25,40 @@ pub struct PklDiagnostic {
     pub source: DiagnosticSource,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Archive,
+    Serialize,
+    Deserialize,
+    SerdeSerialize,
+    SerdeDeserialize,
+)]
 #[rkyv(compare(PartialEq), derive(Debug))]
 pub struct TextPosition {
     pub line: u32,
     pub character: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Archive,
+    Serialize,
+    Deserialize,
+    SerdeSerialize,
+    SerdeDeserialize,
+)]
 #[rkyv(compare(PartialEq), derive(Debug))]
 pub struct TextRange {
     pub start: TextPosition,
     pub end: TextPosition,
-}
-
-impl From<TextPosition> for Position {
-    fn from(value: TextPosition) -> Self {
-        Position::new(value.line, value.character)
-    }
-}
-
-impl From<Position> for TextPosition {
-    fn from(value: Position) -> Self {
-        Self {
-            line: value.line,
-            character: value.character,
-        }
-    }
-}
-
-impl From<TextRange> for Range {
-    fn from(value: TextRange) -> Self {
-        Range::new(value.start.into(), value.end.into())
-    }
-}
-
-impl From<Range> for TextRange {
-    fn from(value: Range) -> Self {
-        Self {
-            start: value.start.into(),
-            end: value.end.into(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -82,14 +73,14 @@ pub enum SymbolKind {
 }
 
 impl SymbolKind {
-    pub fn as_lsp(self) -> LspSymbolKind {
+    pub fn as_protocol(&self) -> u32 {
         match self {
-            Self::Module => LspSymbolKind::MODULE,
-            Self::Import => LspSymbolKind::NAMESPACE,
-            Self::Property => LspSymbolKind::PROPERTY,
-            Self::Class => LspSymbolKind::CLASS,
-            Self::TypeAlias => LspSymbolKind::TYPE_PARAMETER,
-            Self::Annotation => LspSymbolKind::EVENT,
+            Self::Module => protocol::symbol_kind::MODULE,
+            Self::Import => protocol::symbol_kind::NAMESPACE,
+            Self::Property => protocol::symbol_kind::PROPERTY,
+            Self::Class => protocol::symbol_kind::CLASS,
+            Self::TypeAlias => protocol::symbol_kind::TYPE_PARAMETER,
+            Self::Annotation => protocol::symbol_kind::EVENT,
         }
     }
 }
@@ -148,38 +139,34 @@ impl WorkspaceIndex {
         index
     }
 
-    pub fn diagnostics_for_lsp(&self, uri: &str) -> Vec<Diagnostic> {
+    pub fn diagnostics_for_protocol(&self, uri: &str) -> Vec<protocol::Diagnostic> {
         self.diagnostics
             .iter()
             .filter(|diagnostic| diagnostic.uri == uri)
-            .map(|diagnostic| Diagnostic {
-                range: diagnostic.range.into(),
+            .map(|diagnostic| protocol::Diagnostic {
+                range: diagnostic.range,
                 severity: Some(match diagnostic.source {
                     DiagnosticSource::Lex
                     | DiagnosticSource::Parse
                     | DiagnosticSource::Eval
-                    | DiagnosticSource::Io => DiagnosticSeverity::ERROR,
+                    | DiagnosticSource::Io => protocol::diagnostic_severity::ERROR,
                 }),
                 source: Some("pkl-lsp".to_string()),
                 message: diagnostic.message.clone(),
-                ..Diagnostic::default()
             })
             .collect()
     }
 
-    #[allow(deprecated)]
-    pub fn document_symbols(&self, uri: &str) -> Vec<DocumentSymbol> {
+    pub fn document_symbols(&self, uri: &str) -> Vec<protocol::DocumentSymbol> {
         self.symbols
             .iter()
             .filter(|symbol| symbol.uri == uri)
-            .map(|symbol| DocumentSymbol {
+            .map(|symbol| protocol::DocumentSymbol {
                 name: symbol.name.clone(),
                 detail: symbol.detail.clone(),
-                kind: symbol.kind.clone().as_lsp(),
-                tags: None,
-                deprecated: None,
-                range: symbol.range.into(),
-                selection_range: symbol.selection_range.into(),
+                kind: symbol.kind.as_protocol(),
+                range: symbol.range,
+                selection_range: symbol.selection_range,
                 children: None,
             })
             .collect()
@@ -460,7 +447,7 @@ pub fn position_at_offset(text: &str, offset: usize) -> TextPosition {
     }
 }
 
-pub fn offset_at_position(text: &str, position: Position) -> usize {
+pub fn offset_at_position(text: &str, position: TextPosition) -> usize {
     let mut line = 0u32;
     let mut character = 0u32;
     for (idx, ch) in text.char_indices() {
@@ -480,7 +467,7 @@ pub fn offset_at_position(text: &str, position: Position) -> usize {
     text.len()
 }
 
-pub fn word_at_position(text: &str, position: Position) -> Option<String> {
+pub fn word_at_position(text: &str, position: TextPosition) -> Option<String> {
     let offset = offset_at_position(text, position);
     let bytes = text.as_bytes();
     let mut start = offset.min(bytes.len());
