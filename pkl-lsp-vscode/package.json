@@ -34,7 +34,8 @@
     "theme": "dark"
   },
   "extensionKind": [
-    "workspace"
+    "workspace",
+    "web"
   ],
   "activationEvents": [
     "onLanguage:pkl"

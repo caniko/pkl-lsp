@@ -55,10 +55,6 @@ function bundledTarget(): string | undefined {
   if (platform === "win32" && arch === "x64") {
     return "win32-x64";
   }
-  if (platform === "win32" && arch === "arm64") {
-    return "win32-arm64";
-  }
-
   return undefined;
 }
 

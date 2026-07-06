@@ -7,6 +7,11 @@ type WasmServer = {
   request(method: string, paramsJson: string): string;
 };
 
+type WasmLocation = {
+  uri: string;
+  range: vscode.Range;
+};
+
 let server: WasmServer | undefined;
 const diagnostics = vscode.languages.createDiagnosticCollection("pkl-lsp");
 
@@ -35,15 +40,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(vscode.languages.registerDefinitionProvider("pkl", {
     provideDefinition(document, position) {
       syncChange(document);
-      const result = request("textDocument/definition", document, position) as [string, vscode.Range] | null;
-      return result ? new vscode.Location(vscode.Uri.parse(result[0]), result[1]) : undefined;
+      const result = request("textDocument/definition", document, position) as WasmLocation | null;
+      return result ? new vscode.Location(vscode.Uri.parse(result.uri), result.range) : undefined;
     }
   }));
   context.subscriptions.push(vscode.languages.registerReferenceProvider("pkl", {
     provideReferences(document, position) {
       syncChange(document);
-      const result = request("textDocument/references", document, position) as [string, vscode.Range][];
-      return result.map(([uri, range]) => new vscode.Location(vscode.Uri.parse(uri), range));
+      const result = request("textDocument/references", document, position) as WasmLocation[];
+      return result.map((location) => new vscode.Location(vscode.Uri.parse(location.uri), location.range));
     }
   }));
   context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider("pkl", {
@@ -95,4 +100,3 @@ function request(method: string, document: vscode.TextDocument, position: vscode
     position: { line: position.line, character: position.character }
   })));
 }
-
