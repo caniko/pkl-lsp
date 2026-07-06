@@ -166,6 +166,7 @@
             cargo-nextest
             binaryen
             cosign
+            curl
             jq
             minisign
             nodejs
@@ -260,8 +261,23 @@
                 esac
               }
 
-              wasm-pack build crates/pkl-lsp-wasm --target web --out-dir ../../pkl-lsp-vscode/media --no-opt
+              check_wasm_release() {
+                tree_file="$(mktemp)"
+                cargo tree -p pkl-lsp-wasm --target wasm32-unknown-unknown > "$tree_file"
+                if grep -E '(^|[[:space:]├└│─]+)(reqwest|zip|tokio|miette|url|icu_[A-Za-z0-9_-]+) v' "$tree_file"; then
+                  echo "forbidden native or URL/ICU dependency found in pkl-lsp-wasm tree" >&2
+                  exit 1
+                fi
+                wasm_size="$(wc -c < pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm)"
+                if [ "$wasm_size" -gt 307200 ]; then
+                  echo "optimized WASM is $wasm_size bytes, above 307200 byte release gate" >&2
+                  exit 1
+                fi
+              }
+
+              wasm-pack build crates/pkl-lsp-wasm --target web --release --out-dir ../../pkl-lsp-vscode/media --no-opt
               wasm-opt --enable-bulk-memory -Oz pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm -o pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm
+              check_wasm_release
               cd pkl-lsp-vscode
               npm ci
               npm run compile
@@ -287,6 +303,83 @@
         in "${script}/bin/package-vsix";
         meta.description = "Build the VS Code and VSCodium extension package";
       };
+      apps.package-release-assets = {
+        type = "app";
+        program = let
+          script = pkgs.writeShellApplication {
+            name = "package-release-assets";
+            runtimeInputs = with pkgs; [
+              coreutils
+              gnutar
+              gzip
+              nix
+              zip
+            ];
+            text = ''
+              set -euo pipefail
+              version="''${1:-}"
+              if [ -z "$version" ]; then
+                echo "usage: package-release-assets <version>" >&2
+                exit 2
+              fi
+
+              export PKL_LSP_VSIX_TARGETS="''${PKL_LSP_VSIX_TARGETS:-linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64}"
+              ${self.apps.${system}.package-vsix.program} $PKL_LSP_VSIX_TARGETS
+
+              rm -rf release
+              mkdir -p release
+              repo_root="$PWD"
+              cp pkl-lsp-vscode/*.vsix release/
+
+              server_attr_for_target() {
+                case "$1" in
+                  linux-x64) echo pkl-lsp-server-linux-x64 ;;
+                  linux-arm64) echo pkl-lsp-server-linux-arm64 ;;
+                  darwin-x64) echo pkl-lsp-server-darwin-x64 ;;
+                  darwin-arm64) echo pkl-lsp-server-darwin-arm64 ;;
+                  win32-x64) echo pkl-lsp-server-win32-x64 ;;
+                  *)
+                    echo "unsupported release target '$1'" >&2
+                    exit 2
+                    ;;
+                esac
+              }
+
+              server_binary_for_target() {
+                case "$1" in
+                  win32-*) echo pkl-lsp.exe ;;
+                  *) echo pkl-lsp ;;
+                esac
+              }
+
+              for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+                attr="$(server_attr_for_target "$target")"
+                binary="$(server_binary_for_target "$target")"
+                server_out="$(nix build --no-link --print-out-paths ".#$attr")"
+                server_path="$server_out/bin/$binary"
+                if [ ! -x "$server_path" ]; then
+                  echo "server binary for $target does not exist or is not executable: $server_path" >&2
+                  exit 1
+                fi
+
+                staging="$(mktemp -d)"
+                cp "$server_path" "$staging/$binary"
+                chmod 0755 "$staging/$binary"
+                cp LICENSE-APACHE LICENSE-MIT README.md "$staging/"
+                if [ "$target" = win32-x64 ]; then
+                  (cd "$staging" && zip -qr "$repo_root/release/pkl-lsp-$version-$target.zip" .)
+                else
+                  tar -C "$staging" -czf "release/pkl-lsp-$version-$target.tar.gz" .
+                fi
+                rm -rf "$staging"
+              done
+
+              (cd release && sha256sum * > SHA256SUMS)
+            '';
+          };
+        in "${script}/bin/package-release-assets";
+        meta.description = "Build VSIX, standalone server archives, and SHA256SUMS for a release";
+      };
       apps.local-check-release = {
         type = "app";
         program = let
@@ -310,7 +403,7 @@
                 exit 2
               fi
               ${self.apps.${system}.local-check-fast.program}
-              mkdir -p release
+              ${self.apps.${system}.package-release-assets.program} "$version"
               if [ -f about-template.hbs ]; then
                 cargo about generate --output-file release/THIRD_PARTY_LICENSES.html about-template.hbs
               else

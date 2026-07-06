@@ -3,3 +3,43 @@ runtime = "nix"
 runner = "atlas-nix-trusted"
 workspace = true
 with_docs = true
+publish_crates = true
+
+[vscode]
+extension_dir = "pkl-lsp-vscode"
+runner = "atlas-nix-trusted"
+codeberg_repo = "caniko/pkl-lsp"
+codeberg_token_secret = "codeberg_token"
+pat_source = "file-env"
+vsce_pat_file_env = "VSCE_PAT_FILE"
+ovsx_pat_file_env = "OVSX_PAT_FILE"
+cargo_package = "pkl-lsp-server"
+package_command = "nix run .#package-release-assets -- \"$VERSION\""
+prepublish_commands = [
+  "nix develop -c cargo test --workspace --all-features",
+  "nix develop -c cargo clippy --workspace --all-targets --all-features -- --deny warnings",
+  "nix develop -c cargo check -p pkl-lsp-wasm --target wasm32-unknown-unknown",
+  '''
+set -euo pipefail
+nix develop -c cargo tree -p pkl-lsp-wasm --target wasm32-unknown-unknown > wasm-tree.txt
+if grep -E '(^|[[:space:]├└│─]+)(reqwest|zip|tokio|miette|url|icu_[A-Za-z0-9_-]+) v' wasm-tree.txt; then
+  echo "forbidden native or URL/ICU dependency found in pkl-lsp-wasm tree" >&2
+  exit 1
+fi
+''',
+  "nix flake check --no-build",
+  '''
+set -euo pipefail
+nix develop -c wasm-pack build crates/pkl-lsp-wasm --target web --release --out-dir ../../pkl-lsp-vscode/media --no-opt
+nix develop -c wasm-opt --enable-bulk-memory -Oz pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm -o pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm
+wasm_size="$(wc -c < pkl-lsp-vscode/media/pkl_lsp_wasm_bg.wasm)"
+if [ "$wasm_size" -gt 307200 ]; then
+  echo "optimized WASM is $wasm_size bytes, above 307200 byte release gate" >&2
+  exit 1
+fi
+cd pkl-lsp-vscode
+nix develop -c npm ci
+nix develop -c npm run compile
+nix develop -c npm audit --omit=dev --audit-level=moderate
+''',
+]

@@ -113,11 +113,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783029608,
-        "narHash": "sha256-ThzqhX3rAbJBL1Ggk1PCFD1UEd4PQpddvcVVBunKOLE=",
+        "lastModified": 1783280759,
+        "narHash": "sha256-kXNLMVs0bF1DzeK8NPG54mY5wwvdng8XDep3C/uqHhE=",
         "ref": "trunk",
-        "rev": "ffbf7e84570174dcb4aefef851d79cb3730fc68c",
-        "revCount": 1,
+        "rev": "d189903b657f4d0dc4f47003005f1b9260c77e89",
+        "revCount": 2,
         "type": "git",
         "url": "https://codeberg.org/caniko/meta-harbor.git"
       },
@@ -299,11 +299,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1783253707,
-        "narHash": "sha256-imfnTf9J5wgcAGRF4B0aOz2Cl1XfkXL4OVkWoyqXp84=",
+        "lastModified": 1783280778,
+        "narHash": "sha256-nATAAHS7pPbQL+0CofjJa2mAPkh/q282DkvLXZTfY18=",
         "ref": "refs/heads/trunk",
-        "rev": "7c4a488371d0e267c41b3d27ea5ec227e0d87329",
-        "revCount": 101,
+        "rev": "073c7e8ffdd4d9f0b5c6735ec81377d1dde6a145",
+        "revCount": 102,
         "type": "git",
         "url": "https://codeberg.org/caniko/rs-harbor.git"
       },
