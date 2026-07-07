@@ -287,6 +287,7 @@
               npm ci
               npm run compile
               rm -rf bin
+              npx vsce package --no-dependencies
               for target in $targets; do
                 attr="$(server_attr_for_target "$target")"
                 binary="$(server_binary_for_target "$target")"
