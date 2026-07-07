@@ -162,4 +162,6 @@ jobs:
             cat "$file_path"
           }
           PUBLISH_PAT=$(resolve_pat ovsx)
+          OVSX_NAMESPACE=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
+          nix develop -c npx --yes ovsx create-namespace "$OVSX_NAMESPACE" --pat "$PUBLISH_PAT" || true
           nix develop -c npx --yes ovsx publish release/*.vsix --pat "$PUBLISH_PAT"
