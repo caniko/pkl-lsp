@@ -151,6 +151,93 @@ jobs:
           PUBLISH_PAT=$(resolve_pat vsce)
           nix develop -c npx --yes @vscode/vsce publish --packagePath release/*.vsix --pat "$PUBLISH_PAT" --skip-duplicate
 
+      - name: Verify VS Code Marketplace visibility
+        run: |
+          set -euo pipefail
+          resolve_pat() {
+            case "$1" in
+              vsce) file_env=VSCE_PAT_FILE; secret="${VSCE_PAT_FROM_SECRET:-}" ;;
+              ovsx) file_env=OVSX_PAT_FILE; secret="${OVSX_PAT_FROM_SECRET:-}" ;;
+              *) echo "unknown publisher $1" >&2; exit 1 ;;
+            esac
+            file_path="${!file_env:-}"
+            test -n "$file_path" || { echo "missing runner file env ${file_env}" >&2; exit 1; }
+            test -s "$file_path" || { echo "runner file env ${file_env} points at an empty or missing file" >&2; exit 1; }
+            cat "$file_path"
+          }
+          PUBLISH_PAT=$(resolve_pat vsce)
+          export PUBLISH_PAT
+          EXTENSION_PUBLISHER=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
+          EXTENSION_NAME=$(nix shell nixpkgs#jq -c jq -r '.name' pkl-lsp-vscode/package.json)
+          EXTENSION_ID="$EXTENSION_PUBLISHER.$EXTENSION_NAME"
+          export EXTENSION_PUBLISHER EXTENSION_NAME EXTENSION_ID
+          diag_dir=$(mktemp -d)
+          trap 'rm -rf "$diag_dir"' EXIT
+          nix develop -c npm --prefix "$diag_dir" install --silent azure-devops-node-api@15.1.2 >/dev/null
+          NODE_PATH="$diag_dir/node_modules" nix develop -c node <<'NODE'
+          const azdev = require('azure-devops-node-api');
+          const { GalleryApi } = require('azure-devops-node-api/GalleryApi');
+          const Gallery = require('azure-devops-node-api/interfaces/GalleryInterfaces');
+          const publisher = process.env.EXTENSION_PUBLISHER;
+          const extension = process.env.EXTENSION_NAME;
+          const pat = process.env.PUBLISH_PAT;
+          const flags = Gallery.PublishedExtensionFlags;
+          const queryFlags = Gallery.ExtensionQueryFlags.IncludeVersions | Gallery.ExtensionQueryFlags.IncludeMetadata;
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+          const flagNames = value => Object.entries(flags)
+            .filter(([name, flag]) => typeof flag === 'number' && flag !== 0 && (value & flag) !== 0)
+            .map(([name]) => name)
+            .sort();
+          async function main() {
+            const api = new GalleryApi('https://marketplace.visualstudio.com', [azdev.getPersonalAccessTokenHandler(pat)]);
+            let last;
+            for (let attempt = 1; attempt <= 60; attempt += 1) {
+              let ext;
+              try {
+                ext = await api.getExtension(null, publisher, extension, undefined, queryFlags);
+              } catch (error) {
+                if (error && error.statusCode === 404) {
+                  last = 'not found via authenticated Gallery API';
+                  await sleep(10000);
+                  continue;
+                }
+                throw error;
+              }
+              let value = Number(ext.flags || 0);
+              if ((value & flags.Public) === 0) {
+                console.log(`Marketplace extension is missing Public flag; setting it for ${publisher}.${extension}`);
+                ext = await api.updateExtensionProperties(publisher, extension, flags.Public);
+                value = Number(ext.flags || 0);
+              }
+              const versions = (ext.versions || []).map(version => ({ version: version.version, targetPlatform: version.targetPlatform || null, flags: version.flags || null }));
+              console.log(JSON.stringify({ id: `${publisher}.${extension}`, flags: value, flagNames: flagNames(value), versions }, null, 2));
+              if ((value & flags.Public) !== 0 && (value & flags.Validated) !== 0) {
+                return;
+              }
+              last = `flags=${value} (${flagNames(value).join(',') || 'none'})`;
+              await sleep(10000);
+            }
+            throw new Error(`Marketplace extension did not become public and validated: ${last}`);
+          }
+          main().catch(error => {
+            console.error(error && error.stack ? error.stack : error);
+            process.exit(1);
+          });
+          NODE
+          for attempt in $(seq 1 60); do
+            query=$(nix shell nixpkgs#jq -c jq -cn --arg id "$EXTENSION_ID" '{filters:[{criteria:[{filterType:7,value:$id}]}],flags:2151}')
+            result=$(curl --fail --silent --show-error --header 'Content-Type: application/json' --header 'Accept: application/json;api-version=7.2-preview.1' --data "$query" https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery)
+            visible=$(printf '%s' "$result" | nix shell nixpkgs#jq -c jq -r --arg id "$EXTENSION_ID" '.results[0].extensions[]? | select((.publisher.publisherName + "." + .extensionName | ascii_downcase) == ($id | ascii_downcase)) | .flags')
+            if printf '%s\n' "$visible" | grep -Eq '(^|, )public(,|$)' && printf '%s\n' "$visible" | grep -Eq '(^|, )validated(,|$)'; then
+              echo "$EXTENSION_ID is visible in the public VS Code Marketplace Gallery API"
+              exit 0
+            fi
+            echo "waiting for $EXTENSION_ID to become public in Marketplace Gallery API (attempt $attempt/60)"
+            sleep 10
+          done
+          echo "$EXTENSION_ID did not become visible in the public VS Code Marketplace Gallery API" >&2
+          exit 1
+
       - name: Publish to Open VSX
         run: |
           set -euo pipefail
