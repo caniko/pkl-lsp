@@ -203,6 +203,11 @@ jobs:
                 }
                 throw error;
               }
+              if (!ext) {
+                last = 'not found via authenticated Gallery API';
+                await sleep(10000);
+                continue;
+              }
               let value = Number(ext.flags || 0);
               if ((value & flags.Public) === 0) {
                 console.log(`Marketplace extension is missing Public flag; setting it for ${publisher}.${extension}`);
