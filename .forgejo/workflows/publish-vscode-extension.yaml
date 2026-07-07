@@ -127,6 +127,10 @@ jobs:
           for asset in release/*; do
             test -f "$asset" || continue
             name=$(basename "$asset")
+            existing_ids=$(printf '%s' "$release_json" | nix shell nixpkgs#jq -c jq -r --arg name "$name" '.assets[]? | select(.name == $name) | .id')
+            for asset_id in $existing_ids; do
+              curl --fail --silent --show-error --request DELETE --header "$auth_header" "$api/repos/$repo/releases/$release_id/assets/$asset_id" >/dev/null
+            done
             curl --fail --silent --show-error --request POST --header "$auth_header" --form "attachment=@${asset}" "$api/repos/$repo/releases/$release_id/assets?name=$name" >/dev/null
           done
 
@@ -145,7 +149,7 @@ jobs:
             cat "$file_path"
           }
           PUBLISH_PAT=$(resolve_pat vsce)
-          nix develop -c npx --yes @vscode/vsce publish --packagePath release/*.vsix --pat "$PUBLISH_PAT"
+          nix develop -c npx --yes @vscode/vsce publish --packagePath release/*.vsix --pat "$PUBLISH_PAT" --skip-duplicate
 
       - name: Publish to Open VSX
         run: |
@@ -164,4 +168,4 @@ jobs:
           PUBLISH_PAT=$(resolve_pat ovsx)
           OVSX_NAMESPACE=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
           nix develop -c npx --yes ovsx create-namespace "$OVSX_NAMESPACE" --pat "$PUBLISH_PAT" || true
-          nix develop -c npx --yes ovsx publish release/*.vsix --pat "$PUBLISH_PAT"
+          nix develop -c npx --yes ovsx publish release/*.vsix --pat "$PUBLISH_PAT" --skip-duplicate
