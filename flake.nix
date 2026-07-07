@@ -153,34 +153,39 @@
           pname = "pkl-lsp";
         };
       };
-      devShells.default = craneLib.devShell {
-        checks = self.checks.${system};
-        packages = with pkgs;
-          [
-            cargo-about
-            cargo-audit
-            cargo-cyclonedx
-            cargo-deny
-            cargo-llvm-cov
-            cargo-sbom
-            cargo-nextest
-            binaryen
-            cosign
-            curl
-            jq
-            minisign
-            nodejs
-            wasm-pack
-            pre-commit
-            rpm
-            debootstrap
-            util-linux
-            reprepro
-            rust-analyzer
-            taplo
-          ]
-          ++ pre-commit-check.enabledPackages;
-        shellHook = pre-commit-check.shellHook;
+      devShells = let
+        defaultShell = craneLib.devShell {
+          checks = self.checks.${system};
+          packages = with pkgs;
+            [
+              cargo-about
+              cargo-audit
+              cargo-cyclonedx
+              cargo-deny
+              cargo-llvm-cov
+              cargo-sbom
+              cargo-nextest
+              binaryen
+              cosign
+              curl
+              jq
+              minisign
+              nodejs
+              wasm-pack
+              pre-commit
+              rpm
+              debootstrap
+              util-linux
+              reprepro
+              rust-analyzer
+              taplo
+            ]
+            ++ pre-commit-check.enabledPackages;
+          shellHook = pre-commit-check.shellHook;
+        };
+      in {
+        default = defaultShell;
+        docs = defaultShell;
       };
       apps.local-check-fast = {
         type = "app";
@@ -324,7 +329,8 @@
               fi
 
               export PKL_LSP_VSIX_TARGETS="''${PKL_LSP_VSIX_TARGETS:-linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64}"
-              ${self.apps.${system}.package-vsix.program} $PKL_LSP_VSIX_TARGETS
+              read -r -a vsix_targets <<< "$PKL_LSP_VSIX_TARGETS"
+              ${self.apps.${system}.package-vsix.program} "''${vsix_targets[@]}"
 
               rm -rf release
               mkdir -p release
@@ -374,7 +380,7 @@
                 rm -rf "$staging"
               done
 
-              (cd release && sha256sum * > SHA256SUMS)
+              (cd release && sha256sum ./* > SHA256SUMS)
             '';
           };
         in "${script}/bin/package-release-assets";

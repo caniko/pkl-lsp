@@ -35,7 +35,7 @@
   },
   "extensionKind": [
     "workspace",
-    "web"
+    "ui"
   ],
   "activationEvents": [
     "onLanguage:pkl"
