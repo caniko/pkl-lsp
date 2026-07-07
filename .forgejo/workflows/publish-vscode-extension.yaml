@@ -44,10 +44,11 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "release tag must be an exact semver version"; exit 1; }
-          cargo_version=$(nix develop -c cargo metadata --no-deps --format-version 1 | jq -r --arg name pkl-lsp-server '.packages[] | select(.name == $name) | .version')
+          cargo_metadata=$(nix shell nixpkgs#cargo -c cargo metadata --no-deps --format-version 1)
+          cargo_version=$(printf '%s' "$cargo_metadata" | nix shell nixpkgs#jq -c jq -r --arg name pkl-lsp-server '.packages[] | select(.name == $name) | .version')
           test -n "$cargo_version" || { echo "missing Cargo package pkl-lsp-server"; exit 1; }
           test "$cargo_version" = "$VERSION" || { echo "Cargo version $cargo_version does not match tag $VERSION"; exit 1; }
-          extension_version=$(jq -r '.version' pkl-lsp-vscode/package.json)
+          extension_version=$(nix shell nixpkgs#jq -c jq -r '.version' pkl-lsp-vscode/package.json)
           test "$extension_version" = "$VERSION" || { echo "extension version $extension_version does not match tag $VERSION"; exit 1; }
 
           test -s keys/maintainers.gpg
@@ -118,10 +119,10 @@ jobs:
           repo=caniko/pkl-lsp
           auth_header="Authorization: token ${CODEBERG_TOKEN}"
           release_json=$(curl --fail --silent --show-error --header "$auth_header" "$api/repos/$repo/releases/tags/$tag" || true)
-          release_id=$(printf '%s' "$release_json" | jq -r '.id // empty' 2>/dev/null || true)
+          release_id=$(printf '%s' "$release_json" | nix shell nixpkgs#jq -c jq -r '.id // empty' 2>/dev/null || true)
           if test -z "$release_id"; then
             release_json=$(curl --fail --silent --show-error --request POST --header "$auth_header" --header "Content-Type: application/json" --data "{\"tag_name\":\"$tag\",\"name\":\"$tag\",\"draft\":false,\"prerelease\":false}" "$api/repos/$repo/releases")
-            release_id=$(printf '%s' "$release_json" | jq -r '.id')
+            release_id=$(printf '%s' "$release_json" | nix shell nixpkgs#jq -c jq -r '.id')
           fi
           for asset in release/*; do
             test -f "$asset" || continue

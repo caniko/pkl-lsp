@@ -1,7 +1,9 @@
 # pkl-lsp
 
 <!-- simit:badges:start -->
+
 ![CI](https://img.shields.io/badge/CI-drift-2088ff) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](https://docs.rs/pkl-lsp-core) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/pkl-lsp-core)
+
 <!-- simit:badges:end -->
 
 Rust language server for [Pkl](https://pkl-lang.org/) with native and WASM
