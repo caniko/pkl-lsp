@@ -36,7 +36,10 @@ jobs:
             test -s "$file_path" || { echo "runner file env ${file_env} points at an empty or missing file" >&2; exit 1; }
             cat "$file_path"
           }
-          resolve_pat vsce >/dev/null
+          VSCE_PUBLISH_PAT=$(resolve_pat vsce)
+          VSCE_PUBLISHER=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
+          test -n "$VSCE_PUBLISHER" && test "$VSCE_PUBLISHER" != null || { echo "missing VS Code extension publisher in pkl-lsp-vscode/package.json"; exit 1; }
+          nix develop -c npx --yes @vscode/vsce verify-pat "$VSCE_PUBLISHER" --pat "$VSCE_PUBLISH_PAT" || { echo "VS Code Marketplace publisher $VSCE_PUBLISHER is missing or the VSCE PAT lacks publisher permissions. Create/repair it at https://aka.ms/vsm-create-publisher before publishing."; exit 1; }
           resolve_pat ovsx >/dev/null
 
       - name: Validate release tag and extension version
