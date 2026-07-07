@@ -246,6 +246,50 @@ jobs:
           echo "$EXTENSION_ID did not become visible in the public VS Code Marketplace Gallery API" >&2
           exit 1
 
+      - name: Verify VS Code Marketplace signatures
+        run: |
+          set -euo pipefail
+          EXTENSION_PUBLISHER=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
+          EXTENSION_NAME=$(nix shell nixpkgs#jq -c jq -r '.name' pkl-lsp-vscode/package.json)
+          EXTENSION_ID="$EXTENSION_PUBLISHER.$EXTENSION_NAME"
+          tmp_dir=$(mktemp -d)
+          trap 'rm -rf "$tmp_dir"' EXIT
+          query=$(nix shell nixpkgs#jq -c jq -cn --arg id "$EXTENSION_ID" '{filters:[{criteria:[{filterType:7,value:$id}]}],flags:2151}')
+          result=$(curl --fail --silent --show-error --header 'Content-Type: application/json' --header 'Accept: application/json;api-version=7.2-preview.1' --data "$query" https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery)
+          versions_tsv="$tmp_dir/versions.tsv"
+          printf '%s' "$result" | nix shell nixpkgs#jq -c jq -r --arg id "$EXTENSION_ID" '
+            .results[0].extensions[]?
+            | select((.publisher.publisherName + "." + .extensionName | ascii_downcase) == ($id | ascii_downcase))
+            | .versions[]
+            | [
+                .version,
+                (.targetPlatform // "universal"),
+                ((.files[]? | select(.assetType == "Microsoft.VisualStudio.Services.VSIXPackage") | .source) // ""),
+                ((.files[]? | select(.assetType == "Microsoft.VisualStudio.Services.VsixSignature") | .source) // "")
+              ]
+            | @tsv
+          ' > "$versions_tsv"
+          test -s "$versions_tsv" || { echo "no Marketplace versions found for $EXTENSION_ID" >&2; exit 1; }
+          while IFS=$'\t' read -r version target package_url signature_url; do
+            test -n "$package_url" || { echo "missing VSIXPackage asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            test -n "$signature_url" || { echo "missing VsixSignature asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            target_dir="$tmp_dir/$version-$target"
+            mkdir -p "$target_dir/signature"
+            package_path="$target_dir/package.vsix"
+            signature_zip="$target_dir/signature.zip"
+            manifest_path="$target_dir/signature.manifest"
+            signature_path="$target_dir/signature.p7s"
+            curl --fail --silent --show-error --location "$package_url" --output "$package_path"
+            curl --fail --silent --show-error --location "$signature_url" --output "$signature_zip"
+            nix shell nixpkgs#unzip -c unzip -q "$signature_zip" -d "$target_dir/signature"
+            test -s "$target_dir/signature/.signature.manifest" || { echo "signature archive missing .signature.manifest for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            test -s "$target_dir/signature/.signature.p7s" || { echo "signature archive missing .signature.p7s for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            cp "$target_dir/signature/.signature.manifest" "$manifest_path"
+            cp "$target_dir/signature/.signature.p7s" "$signature_path"
+            nix develop -c npx --yes @vscode/vsce@latest verify-signature --packagePath "$package_path" --manifestPath "$manifest_path" --signaturePath "$signature_path"
+            echo "verified Marketplace signature for $EXTENSION_ID@$version ($target)"
+          done < "$versions_tsv"
+
       - name: Publish to Open VSX
         run: |
           set -euo pipefail
