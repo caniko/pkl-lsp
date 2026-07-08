@@ -19,4 +19,3 @@ lsp-types.workspace = true
 pkl-lsp-core = { path = "../pkl-lsp-core" }
 serde_json.workspace = true
 tokio.workspace = true
-tower-lsp.workspace = true

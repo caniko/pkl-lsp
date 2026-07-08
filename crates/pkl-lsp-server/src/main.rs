@@ -1,22 +1,11 @@
-use std::str::FromStr;
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader, Write};
 
 use clap::Parser;
-use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse,
-    Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
-    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-    InitializeParams, InitializeResult, Location, MarkedString, OneOf, Position, Range,
-    ReferenceParams, ServerCapabilities, SymbolKind, TextDocumentSyncCapability,
-    TextDocumentSyncKind, Url, WorkDoneProgressOptions,
-};
 use pkl_lsp_core::{
-    CompletionList, CompletionOptions as CoreCompletionOptions, DocumentStore, FeatureEngine,
-    TextPosition, TextRange,
+    CompletionOptions, DocumentStore, FeatureEngine, Location, TextPosition, TextRange,
 };
-use tokio::sync::Mutex;
-use tower_lsp::{Client, LanguageServer, LspService, Server, jsonrpc::Result as RpcResult};
+use serde_json::{Value, json};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -26,304 +15,491 @@ struct Args {
     stdio: bool,
 }
 
-#[derive(Debug)]
-struct Backend {
-    client: Client,
-    engine: Arc<Mutex<FeatureEngine>>,
+struct Server {
+    engine: FeatureEngine,
+    shutdown_requested: bool,
 }
 
-impl Backend {
-    fn new(client: Client) -> Self {
+impl Server {
+    fn new() -> Self {
         Self {
-            client,
-            engine: Arc::new(Mutex::new(FeatureEngine::new(DocumentStore::default()))),
+            engine: FeatureEngine::new(DocumentStore::default()),
+            shutdown_requested: false,
         }
     }
 
-    async fn publish(&self, uri: &Url) {
-        let uri_string = uri.to_string();
-        let diagnostics = self
-            .engine
-            .lock()
-            .await
-            .publish_diagnostics(&uri_string)
-            .into_iter()
-            .map(core_diagnostic_to_lsp)
-            .collect();
-        self.client
-            .publish_diagnostics(uri.clone(), diagnostics, None)
-            .await;
-    }
-}
+    fn handle(&mut self, message: Value, out: &mut impl Write) -> anyhow::Result<bool> {
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let id = message.get("id").cloned();
+        let params = message.get("params").cloned().unwrap_or(Value::Null);
 
-#[tower_lsp::async_trait]
-impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> RpcResult<InitializeResult> {
-        Ok(InitializeResult {
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
-                )),
-                document_symbol_provider: Some(OneOf::Left(true)),
-                hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
-                completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(false),
-                    trigger_characters: Some(vec![
-                        ".".to_string(),
-                        "\"".to_string(),
-                        "@".to_string(),
-                    ]),
-                    work_done_progress_options: WorkDoneProgressOptions::default(),
-                    all_commit_characters: None,
-                    completion_item: None,
-                }),
-                definition_provider: Some(OneOf::Left(true)),
-                references_provider: Some(OneOf::Left(true)),
-                ..ServerCapabilities::default()
-            },
-            server_info: Some(lsp_types::ServerInfo {
-                name: "pkl-lsp".to_string(),
-                version: Some(env!("CARGO_PKG_VERSION").to_string()),
-            }),
-        })
+        match method {
+            "initialize" => self.respond(out, id, initialize_result()),
+            "initialized" => Ok(()),
+            "shutdown" => {
+                self.shutdown_requested = true;
+                self.respond(out, id, Value::Null)
+            }
+            "exit" => Ok(()),
+            "textDocument/didOpen" => {
+                let uri = required_text_document_uri(&params)?;
+                let text = params
+                    .pointer("/textDocument/text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let version = params
+                    .pointer("/textDocument/version")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0) as i32;
+                self.engine.documents_mut().open(uri.clone(), text, version);
+                self.engine.rebuild();
+                self.publish_diagnostics(out, &uri)?;
+                Ok(())
+            }
+            "textDocument/didChange" => {
+                let uri = required_text_document_uri(&params)?;
+                let version = params
+                    .pointer("/textDocument/version")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0) as i32;
+                if let Some(text) = params
+                    .get("contentChanges")
+                    .and_then(Value::as_array)
+                    .and_then(|changes| changes.last())
+                    .and_then(|change| change.get("text"))
+                    .and_then(Value::as_str)
+                {
+                    self.engine
+                        .documents_mut()
+                        .change(uri.clone(), text.to_string(), version);
+                    self.engine.rebuild();
+                    self.publish_diagnostics(out, &uri)?;
+                }
+                Ok(())
+            }
+            "textDocument/didClose" => {
+                let uri = required_text_document_uri(&params)?;
+                self.engine.documents_mut().close(&uri);
+                self.engine.rebuild();
+                self.write_notification(
+                    out,
+                    "textDocument/publishDiagnostics",
+                    json!({ "uri": uri, "diagnostics": [] }),
+                )
+            }
+            "textDocument/documentSymbol" => {
+                let uri = required_text_document_uri(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.document_symbols(&uri))?,
+                )
+            }
+            "workspace/symbol" => {
+                let query = params
+                    .get("query")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.workspace_symbols(query))?,
+                )
+            }
+            "textDocument/hover" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.hover(&uri, position))?,
+                )
+            }
+            "textDocument/completion" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                let completion = self.engine.completion(
+                    &uri,
+                    position,
+                    CompletionOptions {
+                        include_keywords: true,
+                    },
+                );
+                self.respond(out, id, serde_json::to_value(completion.items)?)
+            }
+            "textDocument/definition" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond_location(out, id, self.engine.definition(&uri, position))
+            }
+            "textDocument/typeDefinition" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond_location(out, id, self.engine.type_definition(&uri, position))
+            }
+            "textDocument/implementation" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.implementation(&uri, position))?,
+                )
+            }
+            "textDocument/references" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.references(&uri, position))?,
+                )
+            }
+            "textDocument/documentHighlight" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.document_highlights(&uri, position))?,
+                )
+            }
+            "textDocument/semanticTokens/full" => {
+                let uri = required_text_document_uri(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    json!({ "data": encode_semantic_tokens(self.engine.semantic_tokens(&uri, None).data) }),
+                )
+            }
+            "textDocument/semanticTokens/range" => {
+                let uri = required_text_document_uri(&params)?;
+                let range = required_range(params.get("range").unwrap_or(&Value::Null))?;
+                self.respond(
+                    out,
+                    id,
+                    json!({ "data": encode_semantic_tokens(self.engine.semantic_tokens(&uri, Some(range)).data) }),
+                )
+            }
+            "textDocument/foldingRange" => {
+                let uri = required_text_document_uri(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.folding_ranges(&uri))?,
+                )
+            }
+            "textDocument/selectionRange" => {
+                let uri = required_text_document_uri(&params)?;
+                let positions = params
+                    .get("positions")
+                    .and_then(Value::as_array)
+                    .map(|values| values.iter().filter_map(parse_position).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.selection_ranges(&uri, &positions))?,
+                )
+            }
+            "textDocument/prepareRename" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.prepare_rename(&uri, position))?,
+                )
+            }
+            "textDocument/rename" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                let new_name = params
+                    .get("newName")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let edit = self
+                    .engine
+                    .rename(&uri, position, new_name)
+                    .map(workspace_edit_to_lsp);
+                self.respond(out, id, serde_json::to_value(edit)?)
+            }
+            "textDocument/codeAction" => {
+                let uri = required_text_document_uri(&params)?;
+                let range = required_range(params.pointer("/range").unwrap_or(&Value::Null))?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.code_actions(&uri, range))?,
+                )
+            }
+            "textDocument/signatureHelp" => {
+                let (uri, position) = required_text_document_position(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.signature_help(&uri, position))?,
+                )
+            }
+            "textDocument/inlayHint" => {
+                let uri = required_text_document_uri(&params)?;
+                let range = required_range(params.get("range").unwrap_or(&Value::Null))?;
+                self.respond(
+                    out,
+                    id,
+                    serde_json::to_value(self.engine.inlay_hints(&uri, range))?,
+                )
+            }
+            "textDocument/diagnostic" => {
+                let uri = required_text_document_uri(&params)?;
+                self.respond(
+                    out,
+                    id,
+                    json!({ "kind": "full", "items": self.engine.publish_diagnostics(&uri) }),
+                )
+            }
+            "workspace/diagnostic" => {
+                let items = self
+                    .engine
+                    .documents()
+                    .iter()
+                    .map(|document| {
+                        json!({
+                            "uri": document.uri,
+                            "kind": "full",
+                            "items": self.engine.publish_diagnostics(&document.uri),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                self.respond(out, id, json!({ "items": items }))
+            }
+            _ if id.is_some() => self.respond_error(out, id, -32601, "method not found"),
+            _ => Ok(()),
+        }?;
+
+        Ok(method != "exit" || !self.shutdown_requested)
     }
 
-    async fn initialized(&self, _: lsp_types::InitializedParams) {
-        self.client
-            .log_message(lsp_types::MessageType::INFO, "pkl-lsp initialized")
-            .await;
+    fn publish_diagnostics(&self, out: &mut impl Write, uri: &str) -> anyhow::Result<()> {
+        self.write_notification(
+            out,
+            "textDocument/publishDiagnostics",
+            json!({ "uri": uri, "diagnostics": self.engine.publish_diagnostics(uri) }),
+        )
     }
 
-    async fn shutdown(&self) -> RpcResult<()> {
+    fn respond_location(
+        &self,
+        out: &mut impl Write,
+        id: Option<Value>,
+        location: Option<Location>,
+    ) -> anyhow::Result<()> {
+        self.respond(out, id, serde_json::to_value(location)?)
+    }
+
+    fn respond(
+        &self,
+        out: &mut impl Write,
+        id: Option<Value>,
+        result: Value,
+    ) -> anyhow::Result<()> {
+        if let Some(id) = id {
+            write_message(
+                out,
+                &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+            )?;
+        }
         Ok(())
     }
 
-    async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let uri = params.text_document.uri;
-        {
-            let mut engine = self.engine.lock().await;
-            engine.documents_mut().open(
-                uri.to_string(),
-                params.text_document.text,
-                params.text_document.version,
-            );
-            engine.rebuild();
-        }
-        self.publish(&uri).await;
-    }
-
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri;
-        if let Some(change) = params.content_changes.into_iter().last() {
-            {
-                let mut engine = self.engine.lock().await;
-                engine.documents_mut().change(
-                    uri.to_string(),
-                    change.text,
-                    params.text_document.version,
-                );
-                engine.rebuild();
-            }
-            self.publish(&uri).await;
-        }
-    }
-
-    async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let uri = params.text_document.uri;
-        {
-            let mut engine = self.engine.lock().await;
-            engine.documents_mut().close(uri.as_ref());
-            engine.rebuild();
-        }
-        self.client.publish_diagnostics(uri, Vec::new(), None).await;
-    }
-
-    async fn document_symbol(
+    fn respond_error(
         &self,
-        params: DocumentSymbolParams,
-    ) -> RpcResult<Option<DocumentSymbolResponse>> {
-        let symbols = self
-            .engine
-            .lock()
-            .await
-            .document_symbols(params.text_document.uri.as_ref())
-            .into_iter()
-            .map(core_document_symbol_to_lsp)
-            .collect();
-        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+        out: &mut impl Write,
+        id: Option<Value>,
+        code: i32,
+        message: &str,
+    ) -> anyhow::Result<()> {
+        if let Some(id) = id {
+            write_message(
+                out,
+                &json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }),
+            )?;
+        }
+        Ok(())
     }
 
-    async fn hover(&self, params: HoverParams) -> RpcResult<Option<Hover>> {
-        Ok(self
-            .engine
-            .lock()
-            .await
-            .hover(
-                params
-                    .text_document_position_params
-                    .text_document
-                    .uri
-                    .as_ref(),
-                text_position_from_lsp(params.text_document_position_params.position),
-            )
-            .map(core_hover_to_lsp))
+    fn write_notification(
+        &self,
+        out: &mut impl Write,
+        method: &str,
+        params: Value,
+    ) -> anyhow::Result<()> {
+        write_message(
+            out,
+            &json!({ "jsonrpc": "2.0", "method": method, "params": params }),
+        )
     }
+}
 
-    async fn completion(&self, params: CompletionParams) -> RpcResult<Option<CompletionResponse>> {
-        let completion = self.engine.lock().await.completion(
-            params.text_document_position.text_document.uri.as_ref(),
-            text_position_from_lsp(params.text_document_position.position),
-            CoreCompletionOptions {
-                include_keywords: true,
+fn initialize_result() -> Value {
+    json!({
+        "capabilities": {
+            "textDocumentSync": 1,
+            "hoverProvider": true,
+            "completionProvider": {
+                "resolveProvider": false,
+                "triggerCharacters": [".", "\"", "@", ":"]
             },
-        );
-        Ok(Some(core_completion_to_lsp(completion)))
-    }
-
-    async fn goto_definition(
-        &self,
-        params: GotoDefinitionParams,
-    ) -> RpcResult<Option<GotoDefinitionResponse>> {
-        let Some(location) = self.engine.lock().await.definition(
-            params
-                .text_document_position_params
-                .text_document
-                .uri
-                .as_ref(),
-            text_position_from_lsp(params.text_document_position_params.position),
-        ) else {
-            return Ok(None);
-        };
-        let Ok(uri) = Url::from_str(&location.uri) else {
-            return Ok(None);
-        };
-        Ok(Some(GotoDefinitionResponse::Scalar(Location {
-            uri,
-            range: text_range_to_lsp(location.range),
-        })))
-    }
-
-    async fn references(&self, params: ReferenceParams) -> RpcResult<Option<Vec<Location>>> {
-        let references = self
-            .engine
-            .lock()
-            .await
-            .references(
-                params.text_document_position.text_document.uri.as_ref(),
-                text_position_from_lsp(params.text_document_position.position),
-            )
-            .into_iter()
-            .filter_map(|location| {
-                Url::from_str(&location.uri).ok().map(|uri| Location {
-                    uri,
-                    range: text_range_to_lsp(location.range),
-                })
-            })
-            .collect();
-        Ok(Some(references))
-    }
-}
-
-fn text_position_from_lsp(position: Position) -> TextPosition {
-    TextPosition {
-        line: position.line,
-        character: position.character,
-    }
-}
-
-fn text_position_to_lsp(position: TextPosition) -> Position {
-    Position::new(position.line, position.character)
-}
-
-fn text_range_to_lsp(range: TextRange) -> Range {
-    Range::new(
-        text_position_to_lsp(range.start),
-        text_position_to_lsp(range.end),
-    )
-}
-
-fn core_diagnostic_to_lsp(diagnostic: pkl_lsp_core::Diagnostic) -> Diagnostic {
-    Diagnostic {
-        range: text_range_to_lsp(diagnostic.range),
-        severity: diagnostic.severity.and_then(|severity| match severity {
-            1 => Some(DiagnosticSeverity::ERROR),
-            _ => None,
-        }),
-        source: diagnostic.source,
-        message: diagnostic.message,
-        ..Diagnostic::default()
-    }
-}
-
-#[allow(deprecated)]
-fn core_document_symbol_to_lsp(symbol: pkl_lsp_core::DocumentSymbol) -> DocumentSymbol {
-    DocumentSymbol {
-        name: symbol.name,
-        detail: symbol.detail,
-        kind: match symbol.kind {
-            2 => SymbolKind::MODULE,
-            3 => SymbolKind::NAMESPACE,
-            5 => SymbolKind::CLASS,
-            7 => SymbolKind::PROPERTY,
-            24 => SymbolKind::EVENT,
-            26 => SymbolKind::TYPE_PARAMETER,
-            _ => SymbolKind::VARIABLE,
+            "definitionProvider": true,
+            "typeDefinitionProvider": true,
+            "implementationProvider": true,
+            "referencesProvider": true,
+            "documentHighlightProvider": true,
+            "documentSymbolProvider": true,
+            "workspaceSymbolProvider": true,
+            "foldingRangeProvider": true,
+            "selectionRangeProvider": true,
+            "renameProvider": { "prepareProvider": true },
+            "codeActionProvider": true,
+            "signatureHelpProvider": { "triggerCharacters": ["(", ","] },
+            "inlayHintProvider": true,
+            "diagnosticProvider": {
+                "identifier": "pkl-lsp",
+                "interFileDependencies": true,
+                "workspaceDiagnostics": true
+            },
+            "semanticTokensProvider": {
+                "legend": {
+                    "tokenTypes": [
+                        "namespace", "type", "class", "parameter", "variable", "property",
+                        "function", "keyword", "comment", "string", "number", "operator", "macro"
+                    ],
+                    "tokenModifiers": ["declaration", "definition", "readonly", "deprecated"]
+                },
+                "full": true,
+                "range": true
+            }
         },
-        tags: None,
-        deprecated: None,
-        range: text_range_to_lsp(symbol.range),
-        selection_range: text_range_to_lsp(symbol.selection_range),
-        children: symbol.children.map(|children| {
-            children
-                .into_iter()
-                .map(core_document_symbol_to_lsp)
-                .collect()
-        }),
+        "serverInfo": {
+            "name": "pkl-lsp",
+            "version": env!("CARGO_PKG_VERSION")
+        }
+    })
+}
+
+fn read_message(input: &mut impl BufRead) -> anyhow::Result<Option<Value>> {
+    let mut content_length = None;
+    loop {
+        let mut line = String::new();
+        if input.read_line(&mut line)? == 0 {
+            return Ok(None);
+        }
+        let line = line.trim_end_matches(['\r', '\n']);
+        if line.is_empty() {
+            break;
+        }
+        if let Some(value) = line.strip_prefix("Content-Length:") {
+            content_length = Some(value.trim().parse::<usize>()?);
+        }
     }
+    let Some(content_length) = content_length else {
+        anyhow::bail!("missing Content-Length header");
+    };
+    let mut body = vec![0; content_length];
+    input.read_exact(&mut body)?;
+    Ok(Some(serde_json::from_slice(&body)?))
 }
 
-fn core_hover_to_lsp(hover: pkl_lsp_core::Hover) -> Hover {
-    Hover {
-        contents: HoverContents::Scalar(MarkedString::String(hover.contents)),
-        range: hover.range.map(text_range_to_lsp),
+fn write_message(out: &mut impl Write, value: &Value) -> anyhow::Result<()> {
+    let body = serde_json::to_vec(value)?;
+    write!(out, "Content-Length: {}\r\n\r\n", body.len())?;
+    out.write_all(&body)?;
+    out.flush()?;
+    Ok(())
+}
+
+fn required_text_document_uri(params: &Value) -> anyhow::Result<String> {
+    params
+        .pointer("/textDocument/uri")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("missing textDocument.uri"))
+}
+
+fn required_text_document_position(params: &Value) -> anyhow::Result<(String, TextPosition)> {
+    let uri = required_text_document_uri(params)?;
+    let position = params
+        .get("position")
+        .or_else(|| params.pointer("/textDocumentPosition/position"))
+        .and_then(parse_position)
+        .ok_or_else(|| anyhow::anyhow!("missing position"))?;
+    Ok((uri, position))
+}
+
+fn parse_position(value: &Value) -> Option<TextPosition> {
+    Some(TextPosition {
+        line: value.get("line")?.as_u64()? as u32,
+        character: value.get("character")?.as_u64()? as u32,
+    })
+}
+
+fn required_range(value: &Value) -> anyhow::Result<TextRange> {
+    let start = value
+        .get("start")
+        .and_then(parse_position)
+        .ok_or_else(|| anyhow::anyhow!("missing range.start"))?;
+    let end = value
+        .get("end")
+        .and_then(parse_position)
+        .ok_or_else(|| anyhow::anyhow!("missing range.end"))?;
+    Ok(TextRange { start, end })
+}
+
+fn encode_semantic_tokens(tokens: Vec<pkl_lsp_core::SemanticToken>) -> Vec<u32> {
+    let mut previous_line = 0;
+    let mut previous_start = 0;
+    tokens
+        .into_iter()
+        .flat_map(|token| {
+            let delta_line = token.line.saturating_sub(previous_line);
+            let delta_start = if delta_line == 0 {
+                token.start.saturating_sub(previous_start)
+            } else {
+                token.start
+            };
+            previous_line = token.line;
+            previous_start = token.start;
+            [
+                delta_line,
+                delta_start,
+                token.length,
+                token.token_type,
+                token.modifiers,
+            ]
+        })
+        .collect()
+}
+
+fn workspace_edit_to_lsp(edit: pkl_lsp_core::WorkspaceEdit) -> Value {
+    let mut changes = BTreeMap::new();
+    for document in edit.changes {
+        changes.insert(document.uri, document.edits);
     }
+    json!({ "changes": changes })
 }
 
-fn core_completion_to_lsp(completion: CompletionList) -> CompletionResponse {
-    CompletionResponse::Array(
-        completion
-            .items
-            .into_iter()
-            .map(|item| CompletionItem {
-                label: item.label,
-                kind: item.kind.and_then(|kind| match kind {
-                    7 => Some(CompletionItemKind::CLASS),
-                    9 => Some(CompletionItemKind::MODULE),
-                    10 => Some(CompletionItemKind::PROPERTY),
-                    14 => Some(CompletionItemKind::KEYWORD),
-                    18 => Some(CompletionItemKind::REFERENCE),
-                    25 => Some(CompletionItemKind::TYPE_PARAMETER),
-                    _ => None,
-                }),
-                detail: item.detail,
-                documentation: item.documentation.map(lsp_types::Documentation::String),
-                ..CompletionItem::default()
-            })
-            .collect(),
-    )
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     if !args.stdio {
         eprintln!("pkl-lsp currently supports only --stdio");
         std::process::exit(2);
     }
 
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(Backend::new);
-    Server::new(stdin, stdout, socket).serve(service).await;
+    let stdin = std::io::stdin();
+    let mut input = BufReader::new(stdin.lock());
+    let stdout = std::io::stdout();
+    let mut output = stdout.lock();
+    let mut server = Server::new();
+
+    while let Some(message) = read_message(&mut input)? {
+        if !server.handle(message, &mut output)? {
+            break;
+        }
+    }
     Ok(())
 }

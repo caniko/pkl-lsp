@@ -5,7 +5,10 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#annotations" },
     { "include": "#keywords" },
+    { "include": "#builtins" },
+    { "include": "#operators" },
     { "include": "#numbers" }
   ],
   "repository": {
@@ -17,20 +20,40 @@
     },
     "strings": {
       "patterns": [
-        { "name": "string.quoted.double.pkl", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.pkl", "match": "\\\\." }] }
+        { "name": "string.quoted.raw.multiline.pkl", "begin": "#+\"\"\"", "end": "\"\"\"#*", "patterns": [] },
+        { "name": "string.quoted.raw.pkl", "begin": "#+\"", "end": "\"#*", "patterns": [] },
+        { "name": "string.quoted.double.multiline.pkl", "begin": "\"\"\"", "end": "\"\"\"", "patterns": [{ "name": "constant.character.escape.pkl", "match": "\\\\." }, { "name": "meta.interpolation.pkl", "begin": "\\\\\\(", "end": "\\)", "patterns": [{ "include": "$self" }] }] },
+        { "name": "string.quoted.double.pkl", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.pkl", "match": "\\\\." }, { "name": "meta.interpolation.pkl", "begin": "\\\\\\(", "end": "\\)", "patterns": [{ "include": "$self" }] }] }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        { "name": "entity.name.function.annotation.pkl", "match": "@[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*" }
       ]
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.pkl", "match": "\\b(amends|as|class|const|else|extends|external|fixed|for|function|hidden|if|import\\*?|in|is|let|local|module|new|open|out|read\\??|super|this|throw|trace|typealias|when)\\b" },
-        { "name": "constant.language.pkl", "match": "\\b(true|false|null)\\b" }
+        { "name": "keyword.control.pkl", "match": "\\b(abstract|amends|as|class|const|else|extends|external|fixed|for|function|hidden|if|import\\*?|in|is|let|local|module|new|open|out|read\\??|super|this|throw|trace|typealias|when)\\b" },
+        { "name": "constant.language.pkl", "match": "\\b(true|false|null|NaN|Infinity)\\b" }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        { "name": "support.type.pkl", "match": "\\b(Any|Null|Boolean|String|Number|Int|Float|Duration|DataSize|Dynamic|Typed|Listing|Mapping|Collection|List|Set|Map|Pair|Regex|Bytes|IntSeq|Class|Function[0-5]|unknown|nothing)\\b" }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.pkl", "match": "(==|!=|<=|>=|&&|\\|\\||\\?\\?|\\?\\.|!!|\\|>|=>|->|\\*\\*|~/|[+\\-*/%<>=!|?:^])" }
       ]
     },
     "numbers": {
       "patterns": [
-        { "name": "constant.numeric.pkl", "match": "\\b[0-9]+(\\.[0-9]+)?\\b" }
+        { "name": "constant.numeric.integer.hexadecimal.pkl", "match": "\\b0[xX][0-9A-Fa-f_]+\\b" },
+        { "name": "constant.numeric.integer.binary.pkl", "match": "\\b0[bB][01_]+\\b" },
+        { "name": "constant.numeric.integer.octal.pkl", "match": "\\b0[oO][0-7_]+\\b" },
+        { "name": "constant.numeric.float.pkl", "match": "\\b[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9][0-9_]*)?\\b" }
       ]
     }
   }
 }
-

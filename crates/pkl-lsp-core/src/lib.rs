@@ -11,4 +11,8 @@ pub use index::{
     DiagnosticSource, ImportEdge, ImportKind, PklDiagnostic, PklSymbol, SymbolKind, TextPosition,
     TextRange, WorkspaceIndex,
 };
-pub use protocol::{CompletionItem, CompletionList, Diagnostic, DocumentSymbol, Hover, Location};
+pub use protocol::{
+    CodeAction, CompletionItem, CompletionList, Diagnostic, DocumentHighlight, DocumentSymbol,
+    FoldingRange, Hover, InlayHint, Location, PrepareRename, SelectionRange, SemanticToken,
+    SemanticTokens, SignatureHelp, WorkspaceEdit, WorkspaceSymbol,
+};
