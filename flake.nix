@@ -61,7 +61,7 @@
       commonArgs = {
         inherit src;
         pname = "pkl-lsp";
-        version = "0.1.0";
+        version = "0.2.0";
         strictDeps = true;
       };
       cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -106,7 +106,7 @@
         });
       vscodeExtensionSource = pkgs.stdenvNoCC.mkDerivation {
         pname = "pkl-lsp-vscode-extension-source";
-        version = "0.1.0";
+        version = "0.2.0";
         src = ./pkl-lsp-vscode;
         installPhase = ''
           mkdir -p "$out"

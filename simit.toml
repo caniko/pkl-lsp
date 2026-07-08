@@ -3,7 +3,7 @@ runtime = "nix"
 runner = "atlas-nix-trusted"
 workspace = true
 with_docs = true
-publish_crates = true
+publish_crates = false
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"
