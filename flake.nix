@@ -113,6 +113,41 @@
           cp -R . "$out/"
         '';
       };
+      ideaPlatform = pkgs.fetchurl {
+        url = "https://download.jetbrains.com/idea/ideaIU-2025.1.7.1.tar.gz";
+        hash = "sha256-lgMNNhfE+64Hekm0z2+xzvlw/D4dOFvPEcQukU3cjJY=";
+      };
+      jetbrainsPluginSource = pkgs.runCommand "pkl-lsp-jetbrains-source-0.2.1" {} ''
+        cp -R ${./pkl-lsp-jetbrains} "$out"
+        chmod -R u+w "$out"
+        mkdir -p "$out/vendor/idea"
+        tar -xzf ${ideaPlatform} -C "$out/vendor/idea" --strip-components=1
+        rm -rf "$out/vendor/idea/jbr"
+        ln -s ${pkgs.jdk21} "$out/vendor/idea/jbr"
+        mkdir -p "$out/src/main/resources/servers"
+        mkdir -p "$out/src/main/resources/servers/linux-x64"
+        mkdir -p "$out/src/main/resources/servers/linux-arm64"
+        mkdir -p "$out/src/main/resources/servers/win32-x64"
+        mkdir -p "$out/src/main/resources/servers/darwin-x64"
+        mkdir -p "$out/src/main/resources/servers/darwin-arm64"
+        cp ${package}/bin/pkl-lsp "$out/src/main/resources/servers/linux-x64/pkl-lsp"
+        cp ${serverPackages.pkl-lsp-server-aarch64-linux}/bin/pkl-lsp "$out/src/main/resources/servers/linux-arm64/pkl-lsp"
+        cp ${serverPackages.pkl-lsp-server-windows}/bin/pkl-lsp.exe "$out/src/main/resources/servers/win32-x64/pkl-lsp.exe"
+        cp ${serverPackages.pkl-lsp-server-darwin-x86_64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-x64/pkl-lsp"
+        cp ${serverPackages.pkl-lsp-server-darwin-aarch64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-arm64/pkl-lsp"
+      '';
+      jetbrainsPlugin = rs-harbor.lib.mkGradlePackage {
+        inherit pkgs;
+        pname = "pkl-lsp-jetbrains";
+        version = "0.2.1";
+        src = jetbrainsPluginSource;
+        depsJson = ./pkl-lsp-jetbrains/deps.json;
+        artifactPath = "build/distributions/pkl-lsp-0.2.1.zip";
+        gradleBuildTask = "buildPlugin";
+        gradleCheckTask = "test";
+        gradleUpdateTask = "resolveGradleDependencies";
+        gradleFlags = ["--no-daemon" "-Dorg.gradle.java.home=${pkgs.jdk21}"];
+      };
       treefmtEval = treefmt-nix.lib.evalModule pkgs (import ./nix/treefmt.nix);
       pre-commit-check = git-hooks.lib.${system}.run {
         src = ./.;
@@ -132,6 +167,7 @@
         pkl-lsp-server-darwin-x64 = serverPackages.pkl-lsp-server-darwin-x86_64;
         pkl-lsp-server-darwin-arm64 = serverPackages.pkl-lsp-server-darwin-aarch64;
         vscode-extension-source = vscodeExtensionSource;
+        jetbrains-plugin = jetbrainsPlugin;
       };
       formatter = treefmtEval.config.build.wrapper;
       checks = {
@@ -142,6 +178,7 @@
         pkl-lsp-server-darwin-x64 = serverPackages.pkl-lsp-server-darwin-x86_64;
         pkl-lsp-server-darwin-arm64 = serverPackages.pkl-lsp-server-darwin-aarch64;
         wasm = wasmCheck;
+        jetbrains-plugin = jetbrainsPlugin;
         formatting = treefmtEval.config.build.check self;
         clippy = craneLib.cargoClippy (commonArgs
           // {
@@ -175,6 +212,8 @@
               pre-commit
               rpm
               debootstrap
+              gradle_9
+              jdk21
               util-linux
               reprepro
               rust-analyzer

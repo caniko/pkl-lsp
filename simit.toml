@@ -45,3 +45,14 @@ nix develop -c npm run compile
 nix develop -c npm audit --omit=dev --audit-level=moderate
 ''',
 ]
+
+[jetbrains]
+plugin_dir = "pkl-lsp-jetbrains"
+plugin_xml_id = "com.tartanoglu.pkl-lsp"
+package_installable = ".#jetbrains-plugin"
+runner = "atlas-nix-trusted"
+cargo_package = "pkl-lsp-server"
+credential_source = "file-env"
+prepublish_commands = [
+  "nix flake check --no-build",
+]

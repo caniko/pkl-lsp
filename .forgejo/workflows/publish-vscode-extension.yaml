@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ codeberg.workflow }}-${{ codeberg.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -270,60 +270,23 @@ jobs:
             | @tsv
           ' > "$versions_tsv"
           test -s "$versions_tsv" || { echo "no Marketplace versions found for $EXTENSION_ID" >&2; exit 1; }
-          sign_glibc="$(nix eval --raw nixpkgs#glibc)"
-          sign_cxx="$(nix eval --raw nixpkgs#stdenv.cc.cc.lib)"
-          sign_libgcc="$(nix eval --raw nixpkgs#stdenv.cc.cc.libgcc)"
-          sign_openssl="$(nix eval --raw nixpkgs#openssl.out)"
-          sign_nix_ld="$(nix eval --raw nixpkgs#nix-ld)"
-          vsce_runtime_path="$sign_glibc/lib:$sign_cxx/lib:$sign_libgcc/lib:$sign_openssl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          sign_binary="pkl-lsp-vscode/node_modules/@vscode/vsce-sign/bin/vsce-sign"
-          test -x "$sign_binary" || { echo "missing executable $sign_binary" >&2; exit 1; }
-          nix develop -c patchelf \
-            --set-interpreter "$sign_nix_ld/bin/nix-ld" \
-            --set-rpath "$vsce_runtime_path:\$ORIGIN/netcoredeps" \
-            "$sign_binary"
           while IFS=$'\t' read -r version target package_url signature_url; do
             test -n "$package_url" || { echo "missing VSIXPackage asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
             test -n "$signature_url" || { echo "missing VsixSignature asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
             target_dir="$tmp_dir/$version-$target"
-            mkdir -p "$target_dir"
+            mkdir -p "$target_dir/signature"
             package_path="$target_dir/package.vsix"
             signature_zip="$target_dir/signature.zip"
-            verified=false
-            for attempt in $(seq 1 12); do
-              manifest_path="$target_dir/signature.manifest"
-              signature_path="$target_dir/signature.p7s"
-              if ! curl --fail --silent --show-error --location "$package_url" --output "$package_path" \
-                || ! curl --fail --silent --show-error --location "$signature_url" --output "$signature_zip"; then
-                echo "Marketplace signature assets are not ready for $EXTENSION_ID@$version ($target); retrying ($attempt/12)"
-                sleep 10
-                continue
-              fi
-              rm -rf "$target_dir/signature"
-              mkdir -p "$target_dir/signature"
-              if ! nix shell nixpkgs#unzip -c unzip -q "$signature_zip" -d "$target_dir/signature" \
-                || ! test -s "$target_dir/signature/.signature.manifest" \
-                || ! test -s "$target_dir/signature/.signature.p7s"; then
-                echo "Marketplace signature archive is not ready for $EXTENSION_ID@$version ($target); retrying ($attempt/12)"
-                sleep 10
-                continue
-              fi
-              cp "$target_dir/signature/.signature.manifest" "$manifest_path"
-              cp "$target_dir/signature/.signature.p7s" "$signature_path"
-              if env -u GITHUB_ACTIONS \
-                nix develop -c env \
-                NIX_LD="$sign_glibc/lib/ld-linux-x86-64.so.2" \
-                NIX_LD_LIBRARY_PATH="$vsce_runtime_path" \
-                LD_LIBRARY_PATH="$vsce_runtime_path" \
-                ./pkl-lsp-vscode/node_modules/ovsx/node_modules/.bin/vsce verify-signature \
-                --packagePath "$package_path" --manifestPath "$manifest_path" --signaturePath "$signature_path"; then
-                verified=true
-                break
-              fi
-              echo "Marketplace signature verification is not ready for $EXTENSION_ID@$version ($target); retrying ($attempt/12)"
-              sleep 10
-            done
-            test "$verified" = true || { echo "Marketplace signature verification failed for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            manifest_path="$target_dir/signature.manifest"
+            signature_path="$target_dir/signature.p7s"
+            curl --fail --silent --show-error --location "$package_url" --output "$package_path"
+            curl --fail --silent --show-error --location "$signature_url" --output "$signature_zip"
+            nix shell nixpkgs#unzip -c unzip -q "$signature_zip" -d "$target_dir/signature"
+            test -s "$target_dir/signature/.signature.manifest" || { echo "signature archive missing .signature.manifest for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            test -s "$target_dir/signature/.signature.p7s" || { echo "signature archive missing .signature.p7s for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
+            cp "$target_dir/signature/.signature.manifest" "$manifest_path"
+            cp "$target_dir/signature/.signature.p7s" "$signature_path"
+            nix develop -c npx --yes @vscode/vsce@latest verify-signature --packagePath "$package_path" --manifestPath "$manifest_path" --signaturePath "$signature_path"
             echo "verified Marketplace signature for $EXTENSION_ID@$version ($target)"
           done < "$versions_tsv"
 
@@ -343,18 +306,5 @@ jobs:
           }
           PUBLISH_PAT=$(resolve_pat ovsx)
           OVSX_NAMESPACE=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
-          OVSX_EXTENSION=$(nix shell nixpkgs#jq -c jq -r '.name' pkl-lsp-vscode/package.json)
-          VERSION="${GITHUB_REF_NAME#v}"
           nix develop -c npx --yes ovsx create-namespace "$OVSX_NAMESPACE" --pat "$PUBLISH_PAT" || true
           nix develop -c npx --yes ovsx publish release/*.vsix --pat "$PUBLISH_PAT" --skip-duplicate
-          for attempt in $(seq 1 60); do
-            version_info=$(curl --fail --silent --show-error "https://open-vsx.org/api/$OVSX_NAMESPACE/$OVSX_EXTENSION/$VERSION")
-            if printf '%s' "$version_info" | nix shell nixpkgs#jq -c jq -e --arg version "$VERSION" '.version == $version' >/dev/null; then
-              echo "Open VSX exposes $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION"
-              exit 0
-            fi
-            echo "waiting for Open VSX to expose $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION (attempt $attempt/60)"
-            sleep 10
-          done
-          echo "Open VSX did not expose $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION" >&2
-          exit 1

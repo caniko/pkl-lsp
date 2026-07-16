@@ -1,0 +1,25 @@
+<idea-plugin>
+    <id>com.tartanoglu.pkl-lsp</id>
+    <name>Pkl LSP</name>
+    <vendor email="can@tartanoglu.com" url="https://codeberg.org/caniko/pkl-lsp">Can H. Tartanoglu</vendor>
+    <description><![CDATA[
+        <p>Language Server Protocol support for Pkl files in IntelliJ-based IDEs.</p>
+        <p>The plugin bundles native Pkl language-server binaries and allows an explicit server path override.</p>
+    ]]></description>
+    <depends>com.intellij.modules.lsp</depends>
+    <depends>com.intellij.modules.ultimate</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <projectConfigurable
+            parentId="tools"
+            instance="com.tartanoglu.pkllsp.PklLspConfigurable"
+            displayName="Pkl LSP" />
+        <fileType
+            name="Pkl"
+            language="Pkl"
+            implementationClass="com.tartanoglu.pkllsp.PklFileType"
+            extensions="pkl" />
+        <com.intellij.platform.lsp.serverSupportProvider
+            implementation="com.tartanoglu.pkllsp.PklLspServerSupportProvider" />
+    </extensions>
+</idea-plugin>
