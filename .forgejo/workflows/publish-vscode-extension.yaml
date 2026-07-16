@@ -5,11 +5,6 @@ on:
   push:
     tags: ["[0-9]*.[0-9]*.[0-9]*"]
   workflow_dispatch:
-    inputs:
-      release_version:
-        description: Existing release version to repair or republish from this workflow revision
-        required: false
-        default: ""
 
 concurrency:
   group: ${{ codeberg.workflow }}-${{ codeberg.ref }}
@@ -20,7 +15,6 @@ jobs:
     runs-on: atlas-nix-trusted
     env:
       NIX_CONFIG: "experimental-features = nix-command flakes"
-      RELEASE_VERSION: ${{ inputs.release_version }}
     steps:
       - name: Checkout
         uses: https://code.forgejo.org/actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -51,7 +45,7 @@ jobs:
       - name: Validate release tag and extension version
         run: |
           set -euo pipefail
-          VERSION="${RELEASE_VERSION:-${GITHUB_REF_NAME#v}}"
+          VERSION="${GITHUB_REF_NAME#v}"
           printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "release tag must be an exact semver version"; exit 1; }
           cargo_metadata=$(nix shell nixpkgs#cargo -c cargo metadata --no-deps --format-version 1)
           cargo_version=$(printf '%s' "$cargo_metadata" | nix shell nixpkgs#jq -c jq -r --arg name pkl-lsp-server '.packages[] | select(.name == $name) | .version')
@@ -66,9 +60,8 @@ jobs:
           trap 'rm -rf "$GNUPGHOME"' EXIT
           chmod 700 "$GNUPGHOME"
           gpg --batch --import keys/maintainers.gpg
-          tag="${RELEASE_VERSION:-${GITHUB_REF_NAME}}"
-          git fetch --force --tags origin "refs/tags/${tag}:refs/tags/${tag}"
-          git verify-tag "$tag"
+          git fetch --force --tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          git verify-tag "$GITHUB_REF_NAME"
 
       - name: Prepublish command 1
         run: |
@@ -113,7 +106,7 @@ jobs:
       - name: Package release assets
         run: |
           set -euo pipefail
-          VERSION="${RELEASE_VERSION:-${GITHUB_REF_NAME#v}}"
+          VERSION="${GITHUB_REF_NAME#v}"
           export VERSION
           nix run .#package-release-assets -- "$VERSION"
 
@@ -123,8 +116,8 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${CODEBERG_TOKEN:-}" || { echo "missing Actions secret codeberg_token"; exit 1; }
-          VERSION="${RELEASE_VERSION:-${GITHUB_REF_NAME#v}}"
-          tag="${RELEASE_VERSION:-${GITHUB_REF_NAME}}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          tag="${GITHUB_REF_NAME}"
           api='https://codeberg.org/api/v1'
           repo=caniko/pkl-lsp
           auth_header="Authorization: token ${CODEBERG_TOKEN}"
