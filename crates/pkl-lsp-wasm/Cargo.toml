@@ -11,7 +11,14 @@ keywords = ["pkl", "language-server", "wasm"]
 categories = ["wasm", "development-tools"]
 readme = "README.md"
 documentation = "https://docs.rs/pkl-lsp-wasm"
-include = ["/src/**/*", "/Cargo.toml", "/README.md", "/LICENSE", "/LICENSE-MIT", "/LICENSE-APACHE"]
+include = [
+  "/src/**/*",
+  "/Cargo.toml",
+  "/README.md",
+  "/LICENSE",
+  "/LICENSE-MIT",
+  "/LICENSE-APACHE",
+]
 
 [package.metadata.docs.rs]
 all-features = true

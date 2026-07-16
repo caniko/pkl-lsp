@@ -11,7 +11,14 @@ keywords = ["pkl", "language-server", "lsp"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 documentation = "https://docs.rs/pkl-lsp-server"
-include = ["/src/**/*", "/Cargo.toml", "/README.md", "/LICENSE", "/LICENSE-MIT", "/LICENSE-APACHE"]
+include = [
+  "/src/**/*",
+  "/Cargo.toml",
+  "/README.md",
+  "/LICENSE",
+  "/LICENSE-MIT",
+  "/LICENSE-APACHE",
+]
 
 [package.metadata.docs.rs]
 all-features = true

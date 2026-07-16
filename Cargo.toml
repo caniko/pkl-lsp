@@ -18,7 +18,16 @@ readme = "README.md"
 documentation = "https://docs.rs/pkl-lsp-core"
 keywords = ["pkl", "language-server", "lsp"]
 categories = ["development-tools", "parser-implementations"]
-include = ["/crates/**/*", "/Cargo.toml", "/Cargo.lock", "/README.md", "/CHANGELOG.md", "/LICENSE", "/LICENSE-MIT", "/LICENSE-APACHE"]
+include = [
+  "/crates/**/*",
+  "/Cargo.toml",
+  "/Cargo.lock",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/LICENSE-MIT",
+  "/LICENSE-APACHE",
+]
 
 [workspace.dependencies]
 anyhow = "1"
