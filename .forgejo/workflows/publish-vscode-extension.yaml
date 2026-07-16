@@ -299,8 +299,9 @@ jobs:
               fi
               cp "$target_dir/signature/.signature.manifest" "$manifest_path"
               cp "$target_dir/signature/.signature.p7s" "$signature_path"
-              if env -u GITHUB_ACTIONS LD_LIBRARY_PATH="$vsce_runtime_path" \
-                nix develop -c ./pkl-lsp-vscode/node_modules/ovsx/node_modules/.bin/vsce verify-signature \
+              if env -u GITHUB_ACTIONS \
+                nix develop -c env LD_LIBRARY_PATH="$vsce_runtime_path" \
+                ./pkl-lsp-vscode/node_modules/ovsx/node_modules/.bin/vsce verify-signature \
                 --packagePath "$package_path" --manifestPath "$manifest_path" --signaturePath "$signature_path"; then
                 verified=true
                 break
