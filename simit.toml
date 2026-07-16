@@ -53,6 +53,4 @@ package_installable = ".#jetbrains-plugin"
 runner = "atlas-nix-trusted"
 cargo_package = "pkl-lsp-server"
 credential_source = "file-env"
-prepublish_commands = [
-  "nix flake check --no-build",
-]
+prepublish_commands = ["nix flake check --no-build"]
