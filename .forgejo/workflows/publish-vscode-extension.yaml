@@ -274,9 +274,9 @@ jobs:
           sign_binary="pkl-lsp-vscode/node_modules/@vscode/vsce-sign/bin/vsce-sign"
           echo "Node runtime: $(nix develop -c node -p 'process.platform + "/" + process.arch')"
           echo "vsce-sign binary: $sign_binary"
-          find pkl-lsp-vscode/node_modules -type f -path '*/@vscode/vsce-sign*/bin/vsce-sign' -print
+          nix develop -c find pkl-lsp-vscode/node_modules -type f -path '*/@vscode/vsce-sign*/bin/vsce-sign' -print
           if test -e "$sign_binary"; then
-            file "$sign_binary"
+            nix develop -c file "$sign_binary"
             env -u GITHUB_ACTIONS nix develop -c env LD_LIBRARY_PATH="$vsce_runtime_path" ldd "$sign_binary" || true
           fi
           while IFS=$'\t' read -r version target package_url signature_url; do
