@@ -270,6 +270,7 @@ jobs:
             | @tsv
           ' > "$versions_tsv"
           test -s "$versions_tsv" || { echo "no Marketplace versions found for $EXTENSION_ID" >&2; exit 1; }
+          vsce_runtime_path="$(nix eval --raw nixpkgs#stdenv.cc.cc.lib)/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           while IFS=$'\t' read -r version target package_url signature_url; do
             test -n "$package_url" || { echo "missing VSIXPackage asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
             test -n "$signature_url" || { echo "missing VsixSignature asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
@@ -298,7 +299,8 @@ jobs:
               fi
               cp "$target_dir/signature/.signature.manifest" "$manifest_path"
               cp "$target_dir/signature/.signature.p7s" "$signature_path"
-              if env -u GITHUB_ACTIONS nix develop -c ./pkl-lsp-vscode/node_modules/ovsx/node_modules/.bin/vsce verify-signature \
+              if env -u GITHUB_ACTIONS LD_LIBRARY_PATH="$vsce_runtime_path" \
+                nix develop -c ./pkl-lsp-vscode/node_modules/ovsx/node_modules/.bin/vsce verify-signature \
                 --packagePath "$package_path" --manifestPath "$manifest_path" --signaturePath "$signature_path"; then
                 verified=true
                 break
