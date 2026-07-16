@@ -8,7 +8,7 @@ symbol queries, but the server does not yet provide full workspace semantics.
   whole-workspace PKL diagnostics until files are read, edited, or otherwise
   touched by the LSP client.
 - Diagnostics are lex/parse oriented. Evaluator, import, package, and host IO
-  diagnostics are not fully wired through the pklr capability layer yet.
+  diagnostics are not fully wired through pklr yet.
 - Definitions and references are based on the local symbol/text index, not
   deterministic semantic resolution across imports and inheritance.
 - `workspace/symbol`, `textDocument/implementation`, and call hierarchy methods

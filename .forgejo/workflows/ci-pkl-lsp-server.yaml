@@ -19,7 +19,7 @@ jobs:
       CARGO_HOME: "/tmp/.cargo"
     steps:
       - name: Checkout
-        uses: https://code.forgejo.org/actions/checkout@v4
+        uses: https://code.forgejo.org/actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Add cargo bin to PATH
         run: echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
@@ -32,6 +32,27 @@ jobs:
 
       - name: Test
         run: nix develop -c cargo test -p pkl-lsp-server
+
+      - name: Check cargo-audit tool
+        run: nix develop -c cargo-audit --version
+
+      - name: Check cargo-deny tool
+        run: nix develop -c cargo-deny --version
+
+      - name: Fetch RustSec advisory database
+        run: |
+          db="${CARGO_HOME:-$HOME/.cargo}/advisory-db"
+          rm -rf "$db"
+          mkdir -p "$(dirname "$db")"
+          git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 clone --depth 1 https://github.com/RustSec/advisory-db.git "$db"
+
+      - name: Audit dependencies
+        run: |
+          db="${CARGO_HOME:-$HOME/.cargo}/advisory-db"
+          nix develop -c cargo audit --db "$db" --no-fetch --stale
+
+      - name: Deny dependency policy
+        run: nix develop -c cargo deny check bans licenses sources
 
       - name: Build docs
         run: nix develop .#docs -c cargo doc -p pkl-lsp-server --no-deps --all-features

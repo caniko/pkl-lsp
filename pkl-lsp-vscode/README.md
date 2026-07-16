@@ -18,9 +18,8 @@ use the bundled server for the current platform.
 
 ## Current Scope
 
-This first release focuses on parser-backed editor intelligence and WASM
-packaging. Full evaluator-backed workspace parity depends on the temporary
-vendored `pklr` capability work being upstreamed.
+This release focuses on parser-backed editor intelligence and WASM packaging.
+The Rust workspace consumes `pklr`'s registry-published parser-only feature.
 
 ## Repository
 

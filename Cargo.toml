@@ -4,16 +4,21 @@ members = [
   "crates/pkl-lsp-core",
   "crates/pkl-lsp-server",
   "crates/pkl-lsp-wasm",
-  "vendor/pklr",
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 repository = "https://codeberg.org/caniko/pkl-lsp"
 homepage = "https://codeberg.org/caniko/pkl-lsp"
+description = "Rust and WebAssembly language server workspace for Pkl"
+readme = "README.md"
+documentation = "https://docs.rs/pkl-lsp-core"
+keywords = ["pkl", "language-server", "lsp"]
+categories = ["development-tools", "parser-implementations"]
+include = ["/crates/**/*", "/Cargo.toml", "/Cargo.lock", "/README.md", "/CHANGELOG.md", "/LICENSE", "/LICENSE-MIT", "/LICENSE-APACHE"]
 
 [workspace.dependencies]
 anyhow = "1"
@@ -21,7 +26,7 @@ clap = { version = "4", features = ["derive"] }
 console_error_panic_hook = "0.1"
 futures = "0.3"
 lsp-types = "0.97"
-pklr = { path = "vendor/pklr", default-features = false, features = ["parse"] }
+pklr = { version = "1.2.0", default-features = false, features = ["parse"] }
 rkyv = { version = "0.8", features = ["bytecheck"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

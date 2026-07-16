@@ -2,11 +2,19 @@
 name = "pkl-lsp-wasm"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
+license = "MIT OR Apache-2.0"
+repository = "https://codeberg.org/caniko/pkl-lsp"
 homepage.workspace = true
 description = "WASM bridge for pkl-lsp"
+rust-version = "1.88"
+keywords = ["pkl", "language-server", "wasm"]
+categories = ["wasm", "development-tools"]
+readme = "README.md"
+documentation = "https://docs.rs/pkl-lsp-wasm"
+include = ["/src/**/*", "/Cargo.toml", "/README.md", "/LICENSE", "/LICENSE-MIT", "/LICENSE-APACHE"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -16,6 +24,6 @@ wasm-opt = false
 
 [dependencies]
 console_error_panic_hook.workspace = true
-pkl-lsp-core = { path = "../pkl-lsp-core" }
+pkl-lsp-core = { version = "0.2", path = "../pkl-lsp-core" }
 serde_json.workspace = true
 wasm-bindgen.workspace = true

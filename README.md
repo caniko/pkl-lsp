@@ -9,9 +9,8 @@
 Rust language server for [Pkl](https://pkl-lang.org/) with native and WASM
 editor targets.
 
-This repository intentionally vendors `pklr` while WASM-capable evaluator IO
-support is prepared for upstreaming. The vendored crate is temporary and should
-be retired once equivalent support is released upstream.
+The LSP uses `pklr`'s parser-only feature so the native and WASM crates avoid
+evaluator and host-IO dependencies.
 
 ## Workspace
 
@@ -20,7 +19,6 @@ be retired once equivalent support is released upstream.
 - `pkl-lsp-server` - native stdio LSP server.
 - `pkl-lsp-wasm` - WASM bridge for VS Code web.
 - `pkl-lsp-vscode` - VS Code/Codium extension sources.
-- `vendor/pklr` - temporary upstream-compatible `pklr` work area.
 
 ## Development
 

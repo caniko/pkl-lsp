@@ -2,11 +2,19 @@
 name = "pkl-lsp-core"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
+license = "MIT OR Apache-2.0"
+repository = "https://codeberg.org/caniko/pkl-lsp"
 homepage.workspace = true
+rust-version = "1.88"
 description = "Core PKL language analysis for pkl-lsp"
+keywords = ["pkl", "language-server", "parser"]
+categories = ["parser-implementations", "development-tools"]
+readme = "README.md"
+documentation = "https://docs.rs/pkl-lsp-core"
+include = ["/src/**/*", "/Cargo.toml", "/README.md", "/LICENSE", "/LICENSE-MIT", "/LICENSE-APACHE"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 pklr.workspace = true
