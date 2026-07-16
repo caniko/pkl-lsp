@@ -343,5 +343,18 @@ jobs:
           }
           PUBLISH_PAT=$(resolve_pat ovsx)
           OVSX_NAMESPACE=$(nix shell nixpkgs#jq -c jq -r '.publisher' pkl-lsp-vscode/package.json)
+          OVSX_EXTENSION=$(nix shell nixpkgs#jq -c jq -r '.name' pkl-lsp-vscode/package.json)
+          VERSION="${GITHUB_REF_NAME#v}"
           nix develop -c npx --yes ovsx create-namespace "$OVSX_NAMESPACE" --pat "$PUBLISH_PAT" || true
           nix develop -c npx --yes ovsx publish release/*.vsix --pat "$PUBLISH_PAT" --skip-duplicate
+          for attempt in $(seq 1 60); do
+            versions=$(curl --fail --silent --show-error "https://open-vsx.org/api/$OVSX_NAMESPACE/$OVSX_EXTENSION/versions")
+            if printf '%s' "$versions" | nix shell nixpkgs#jq -c jq -e --arg version "$VERSION" '.versions[$version] != null' >/dev/null; then
+              echo "Open VSX exposes $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION"
+              exit 0
+            fi
+            echo "waiting for Open VSX to expose $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION (attempt $attempt/60)"
+            sleep 10
+          done
+          echo "Open VSX did not expose $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION" >&2
+          exit 1
