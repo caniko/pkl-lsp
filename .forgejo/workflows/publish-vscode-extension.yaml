@@ -348,8 +348,8 @@ jobs:
           nix develop -c npx --yes ovsx create-namespace "$OVSX_NAMESPACE" --pat "$PUBLISH_PAT" || true
           nix develop -c npx --yes ovsx publish release/*.vsix --pat "$PUBLISH_PAT" --skip-duplicate
           for attempt in $(seq 1 60); do
-            versions=$(curl --fail --silent --show-error "https://open-vsx.org/api/$OVSX_NAMESPACE/$OVSX_EXTENSION/versions")
-            if printf '%s' "$versions" | nix shell nixpkgs#jq -c jq -e --arg version "$VERSION" '.versions[$version] != null' >/dev/null; then
+            version_info=$(curl --fail --silent --show-error "https://open-vsx.org/api/$OVSX_NAMESPACE/$OVSX_EXTENSION/$VERSION")
+            if printf '%s' "$version_info" | nix shell nixpkgs#jq -c jq -e --arg version "$VERSION" '.version == $version' >/dev/null; then
               echo "Open VSX exposes $OVSX_NAMESPACE.$OVSX_EXTENSION@$VERSION"
               exit 0
             fi
