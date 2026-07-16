@@ -208,29 +208,26 @@ impl Evaluator {
         if let Some(cached) = self.http_cache.get(fetch_url) {
             return Ok(cached.clone());
         }
-        let err_ctx = if fetch_url != url {
-            format!("{url} (rewritten to {fetch_url})")
-        } else {
-            fetch_url.to_string()
-        };
         #[cfg(feature = "http")]
-        let body = self
-            .http_client
-            .get(fetch_url)
-            .send()
-            .await
-            .map_err(|e| Error::Eval(format!("HTTP fetch failed for {err_ctx}: {e}")))?
-            .error_for_status()
-            .map_err(|e| Error::Eval(format!("HTTP error for {err_ctx}: {e}")))?
-            .text()
-            .await
-            .map_err(|e| Error::Eval(format!("HTTP read failed for {err_ctx}: {e}")))?;
+        let body = {
+            let err_ctx = if fetch_url != url {
+                format!("{url} (rewritten to {fetch_url})")
+            } else {
+                fetch_url.to_string()
+            };
+            self.http_client
+                .get(fetch_url)
+                .send()
+                .await
+                .map_err(|e| Error::Eval(format!("HTTP fetch failed for {err_ctx}: {e}")))?
+                .error_for_status()
+                .map_err(|e| Error::Eval(format!("HTTP error for {err_ctx}: {e}")))?
+                .text()
+                .await
+                .map_err(|e| Error::Eval(format!("HTTP read failed for {err_ctx}: {e}")))?
+        };
         #[cfg(not(feature = "http"))]
-        let body = self
-            .capabilities
-            .fetch_text(fetch_url)
-            .await
-            .map_err(|error| Error::Eval(format!("HTTP fetch failed for {err_ctx}: {error}")))?;
+        let body = self.capabilities.fetch_text(fetch_url).await?;
         self.http_cache.insert(fetch_url.to_string(), body.clone());
         Ok(body)
     }
@@ -330,16 +327,7 @@ impl Evaluator {
         if let Some(dir) = self.package_dirs.get(fetch_url) {
             return Ok(dir.clone());
         }
-        let err_ctx = if fetch_url != zip_url {
-            format!("{zip_url} (rewritten to {fetch_url})")
-        } else {
-            fetch_url.to_string()
-        };
-        let bytes = self
-            .capabilities
-            .fetch_bytes(fetch_url)
-            .await
-            .map_err(|e| Error::Eval(format!("HTTP read failed for {err_ctx}: {e}")))?;
+        let bytes = self.capabilities.fetch_bytes(fetch_url).await?;
         let cursor = std::io::Cursor::new(bytes);
         let mut archive =
             zip::ZipArchive::new(cursor).map_err(|e| Error::Eval(format!("zip error: {e}")))?;
@@ -4778,9 +4766,12 @@ fn collection_to_items(v: Value) -> Vec<(Value, Value)> {
 
 #[cfg(test)]
 mod package_uri_tests {
+    #[cfg(all(feature = "native-io", feature = "package-zip"))]
     use std::path::PathBuf;
 
-    use super::{Evaluator, PackageSource, resolve_package_uri};
+    #[cfg(all(feature = "native-io", feature = "package-zip"))]
+    use super::Evaluator;
+    use super::{PackageSource, resolve_package_uri};
 
     #[test]
     fn generic_package_uri_resolves_to_zip_url() {
@@ -4796,6 +4787,7 @@ mod package_uri_tests {
     }
 
     #[test]
+    #[cfg(all(feature = "native-io", feature = "package-zip"))]
     fn package_dir_lookup_uses_rewritten_zip_url() {
         let mut evaluator = Evaluator::new();
         evaluator.set_http_rewrites(&["https://example.com/=https://mirror.local/".to_string()]);
@@ -4827,5 +4819,75 @@ mod package_uri_tests {
                 .unwrap_err()
                 .to_string();
         assert!(err.contains("unsupported package URI"));
+    }
+}
+
+#[cfg(test)]
+mod capability_error_tests {
+    use std::path::{Path, PathBuf};
+
+    use crate::capabilities::{BoxFuture, EvalCapabilities};
+    use crate::error::{Error, Result};
+
+    use super::Evaluator;
+
+    struct ErroringCapabilities;
+
+    impl EvalCapabilities for ErroringCapabilities {
+        fn read_to_string<'a>(&'a mut self, _path: &'a Path) -> BoxFuture<'a, Result<String>> {
+            fail(Error::Unsupported("read_to_string failed".to_string()))
+        }
+
+        fn read_env<'a>(&'a mut self, _name: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
+            fail(Error::Unsupported("read_env failed".to_string()))
+        }
+
+        fn fetch_text<'a>(&'a mut self, _url: &'a str) -> BoxFuture<'a, Result<String>> {
+            fail(Error::ImportNotFound("custom text error".to_string()))
+        }
+
+        fn fetch_bytes<'a>(&'a mut self, _url: &'a str) -> BoxFuture<'a, Result<Vec<u8>>> {
+            fail(Error::ImportNotFound("custom bytes error".to_string()))
+        }
+
+        fn temp_dir<'a>(&'a mut self, _prefix: &'a str) -> BoxFuture<'a, Result<PathBuf>> {
+            fail(Error::Unsupported("temp_dir failed".to_string()))
+        }
+
+        fn glob<'a>(
+            &'a mut self,
+            _base: &'a Path,
+            _pattern: &'a str,
+        ) -> BoxFuture<'a, Result<Vec<PathBuf>>> {
+            fail(Error::Unsupported("glob failed".to_string()))
+        }
+    }
+
+    fn fail<'a, T>(error: Error) -> BoxFuture<'a, Result<T>> {
+        Box::pin(async move { Err(error) })
+    }
+
+    #[cfg(not(feature = "http"))]
+    #[tokio::test]
+    async fn fetch_source_preserves_capability_error() {
+        let mut evaluator = Evaluator::with_capabilities(ErroringCapabilities);
+        let error = evaluator
+            .fetch_source("https://example.test/module.pkl")
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, Error::ImportNotFound(message) if message == "custom text error"));
+    }
+
+    #[cfg(feature = "package-zip")]
+    #[tokio::test]
+    async fn extract_package_zip_preserves_capability_error() {
+        let mut evaluator = Evaluator::with_capabilities(ErroringCapabilities);
+        let error = evaluator
+            .extract_package_zip("https://example.test/package.zip")
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, Error::ImportNotFound(message) if message == "custom bytes error"));
     }
 }

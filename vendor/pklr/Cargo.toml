@@ -53,10 +53,12 @@ miette-diagnostics = ["dep:miette"]
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
+required-features = ["native-io", "http", "package-zip"]
 
 [[test]]
 name = "pkl_features"
 path = "tests/pkl_features.rs"
+required-features = ["native-io", "http", "package-zip"]
 
 [dependencies.async-recursion]
 version = "1"
