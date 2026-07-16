@@ -273,11 +273,13 @@ jobs:
           sign_glibc="$(nix eval --raw nixpkgs#glibc)"
           sign_cxx="$(nix eval --raw nixpkgs#stdenv.cc.cc.lib)"
           sign_libgcc="$(nix eval --raw nixpkgs#stdenv.cc.cc.libgcc)"
-          vsce_runtime_path="$sign_glibc/lib:$sign_cxx/lib:$sign_libgcc/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          sign_openssl="$(nix eval --raw nixpkgs#openssl.out)"
+          sign_nix_ld="$(nix eval --raw nixpkgs#nix-ld)"
+          vsce_runtime_path="$sign_glibc/lib:$sign_cxx/lib:$sign_libgcc/lib:$sign_openssl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           sign_binary="pkl-lsp-vscode/node_modules/@vscode/vsce-sign/bin/vsce-sign"
           test -x "$sign_binary" || { echo "missing executable $sign_binary" >&2; exit 1; }
           nix develop -c patchelf \
-            --set-interpreter "$sign_glibc/lib/ld-linux-x86-64.so.2" \
+            --set-interpreter "$sign_nix_ld/bin/nix-ld" \
             --set-rpath "$vsce_runtime_path:\$ORIGIN/netcoredeps" \
             "$sign_binary"
           while IFS=$'\t' read -r version target package_url signature_url; do
@@ -309,7 +311,10 @@ jobs:
               cp "$target_dir/signature/.signature.manifest" "$manifest_path"
               cp "$target_dir/signature/.signature.p7s" "$signature_path"
               if env -u GITHUB_ACTIONS \
-                nix develop -c env LD_LIBRARY_PATH="$vsce_runtime_path" \
+                nix develop -c env \
+                NIX_LD="$sign_glibc/lib/ld-linux-x86-64.so.2" \
+                NIX_LD_LIBRARY_PATH="$vsce_runtime_path" \
+                LD_LIBRARY_PATH="$vsce_runtime_path" \
                 ./pkl-lsp-vscode/node_modules/ovsx/node_modules/.bin/vsce verify-signature \
                 --packagePath "$package_path" --manifestPath "$manifest_path" --signaturePath "$signature_path"; then
                 verified=true
