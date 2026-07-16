@@ -270,15 +270,16 @@ jobs:
             | @tsv
           ' > "$versions_tsv"
           test -s "$versions_tsv" || { echo "no Marketplace versions found for $EXTENSION_ID" >&2; exit 1; }
-          vsce_runtime_path="$(nix eval --raw nixpkgs#stdenv.cc.cc.lib)/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          sign_glibc="$(nix eval --raw nixpkgs#glibc)"
+          sign_cxx="$(nix eval --raw nixpkgs#stdenv.cc.cc.lib)"
+          sign_libgcc="$(nix eval --raw nixpkgs#stdenv.cc.cc.libgcc)"
+          vsce_runtime_path="$sign_glibc/lib:$sign_cxx/lib:$sign_libgcc/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           sign_binary="pkl-lsp-vscode/node_modules/@vscode/vsce-sign/bin/vsce-sign"
-          echo "Node runtime: $(nix develop -c node -p 'process.platform + "/" + process.arch')"
-          echo "vsce-sign binary: $sign_binary"
-          nix develop -c find pkl-lsp-vscode/node_modules -type f -path '*/@vscode/vsce-sign*/bin/vsce-sign' -print
-          if test -e "$sign_binary"; then
-            nix develop -c file "$sign_binary"
-            env -u GITHUB_ACTIONS nix develop -c env LD_LIBRARY_PATH="$vsce_runtime_path" ldd "$sign_binary" || true
-          fi
+          test -x "$sign_binary" || { echo "missing executable $sign_binary" >&2; exit 1; }
+          nix develop -c patchelf \
+            --set-interpreter "$sign_glibc/lib/ld-linux-x86-64.so.2" \
+            --set-rpath "$vsce_runtime_path:\$ORIGIN/netcoredeps" \
+            "$sign_binary"
           while IFS=$'\t' read -r version target package_url signature_url; do
             test -n "$package_url" || { echo "missing VSIXPackage asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
             test -n "$signature_url" || { echo "missing VsixSignature asset for $EXTENSION_ID@$version ($target)" >&2; exit 1; }
