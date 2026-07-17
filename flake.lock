@@ -316,11 +316,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1784238617,
-        "narHash": "sha256-Cxd37xUYVOSsQSdD6jnMi/ImpcrCHQyWkkIOJus3hTI=",
+        "lastModified": 1784266203,
+        "narHash": "sha256-UIeTirg4900g4YkzJ4ShM22nT2NIQxKSW7aUhkLxzdU=",
         "ref": "refs/heads/trunk",
-        "rev": "6ffcbbce6ab3f7e076cde7afd0a74116e86ef52d",
-        "revCount": 125,
+        "rev": "8692201d374c50e74e4db552072fe9665c83cab8",
+        "revCount": 131,
         "type": "git",
         "url": "https://codeberg.org/caniko/rs-harbor.git"
       },

@@ -136,13 +136,14 @@
         cp ${serverPackages.pkl-lsp-server-darwin-x86_64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-x64/pkl-lsp"
         cp ${serverPackages.pkl-lsp-server-darwin-aarch64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-arm64/pkl-lsp"
       '';
-      jetbrainsPlugin = rs-harbor.lib.mkGradlePackage {
+      jetbrainsPlugin = rs-harbor.lib.mkJetBrainsPlugin {
         inherit pkgs;
         pname = "pkl-lsp-jetbrains";
         version = "0.2.1";
         src = jetbrainsPluginSource;
         depsJson = ./pkl-lsp-jetbrains/deps.json;
         artifactPath = "build/distributions/pkl-lsp-0.2.1.zip";
+        pluginXmlId = "com.tartanoglu.pkl-lsp";
         gradleBuildTask = "buildPlugin";
         gradleCheckTask = "test";
         gradleUpdateTask = "resolveGradleDependencies";

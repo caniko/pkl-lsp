@@ -3,8 +3,13 @@ name: Publish JetBrains Plugin
 
 on:
   push:
-    tags: ["[0-9]*.[0-9]*.[0-9]*"]
+    tags: ["[0-9]*.[0-9]*.[0-9]*", "v[0-9]*.[0-9]*.[0-9]*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: Plugin version to publish (for example 0.2.1)
+        required: true
+        type: string
 
 concurrency:
   group: ${{ codeberg.workflow }}-${{ codeberg.ref }}
@@ -42,7 +47,8 @@ jobs:
           PLUGIN_XML_ID: com.tartanoglu.pkl-lsp
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           cargo_metadata=$(nix shell nixpkgs#cargo -c cargo metadata --format-version 1 --no-deps)
           cargo_version=$(printf '%s' "$cargo_metadata" | nix shell nixpkgs#jq -c jq -r --arg package pkl-lsp-server '.packages[] | select(.name == $package) | .version' | head -n1)
@@ -64,36 +70,47 @@ jobs:
           result=$(nix build --no-link --print-out-paths "$INSTALLABLE" | tail -n1)
           mapfile -t zips < <(find "$result" -type f -name '*.zip' -print)
           test "${#zips[@]}" -eq 1
-          cp "${zips[0]}" "$RUNNER_TEMP/pkl-lsp-jetbrains-unsigned.zip"
-          chmod u+w "$RUNNER_TEMP/pkl-lsp-jetbrains-unsigned.zip"
-          sha256sum "$RUNNER_TEMP/pkl-lsp-jetbrains-unsigned.zip"
-          stat --printf='plugin archive size: %s bytes\n' "$RUNNER_TEMP/pkl-lsp-jetbrains-unsigned.zip"
+          basename "${zips[0]}" > "$RUNNER_TEMP/jetbrains-plugin-archive-name"
+          cp "${zips[0]}" "$RUNNER_TEMP/jetbrains-plugin-unsigned.zip"
+          chmod u+w "$RUNNER_TEMP/jetbrains-plugin-unsigned.zip"
+          sha256sum "$RUNNER_TEMP/jetbrains-plugin-unsigned.zip"
+          stat --printf='plugin archive size: %s bytes\n' "$RUNNER_TEMP/jetbrains-plugin-unsigned.zip"
 
       - name: Sign plugin
         env:
           PLUGIN_DIR: pkl-lsp-jetbrains
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
           cd "$PLUGIN_DIR"
           mkdir -p build/distributions
-          cp "$RUNNER_TEMP/pkl-lsp-jetbrains-unsigned.zip" "build/distributions/pkl-lsp-$VERSION.zip"
+          archive_name=$(cat "$RUNNER_TEMP/jetbrains-plugin-archive-name")
+          test -n "$archive_name"
+          cp "$RUNNER_TEMP/jetbrains-plugin-unsigned.zip" "build/distributions/$archive_name"
           CERTIFICATE_CHAIN_FILE="$RUNNER_TEMP/certificate-chain.pem" \
           PRIVATE_KEY_FILE="$RUNNER_TEMP/private-key.pem" \
           PRIVATE_KEY_PASSWORD="$(cat "$RUNNER_TEMP/private-key-password")" \
           nix shell nixpkgs#gradle_9 nixpkgs#jdk21 -c gradle --no-daemon -x buildPlugin signPlugin verifyPluginSignature
           signed=$(find build/distributions -maxdepth 1 -type f -name '*.zip' ! -name '*unsigned*' | sort | tail -n1)
           test -n "$signed"
-          cp "$signed" "$RUNNER_TEMP/pkl-lsp-jetbrains-signed.zip"
+          cp "$signed" "$RUNNER_TEMP/jetbrains-plugin-signed.zip"
 
       - name: Publish to JetBrains Marketplace
+        env:
+          PLUGIN_XML_ID: com.tartanoglu.pkl-lsp
+          CHANNEL: 
         run: |
           set -euo pipefail
           JETBRAINS_MARKETPLACE_TOKEN=$(cat "$RUNNER_TEMP/marketplace-token")
-          upload_url="https://plugins.jetbrains.com/api/updates/upload?pluginId=com.tartanoglu.pkl-lsp"
-          curl --fail-with-body --retry 3 -X POST -H "Authorization: Bearer $JETBRAINS_MARKETPLACE_TOKEN" -F "file=@$RUNNER_TEMP/pkl-lsp-jetbrains-signed.zip" "$upload_url"
+          upload_url="https://plugins.jetbrains.com/api/updates/upload"
+          upload_args=(-F "xmlId=$PLUGIN_XML_ID" -F "file=@$RUNNER_TEMP/jetbrains-plugin-signed.zip;type=application/zip")
+          if [ -n "$CHANNEL" ]; then
+            upload_args+=(-F "channel=$CHANNEL")
+          fi
+          curl --fail-with-body --retry 3 -X POST -H "Authorization: Bearer $JETBRAINS_MARKETPLACE_TOKEN" "${upload_args[@]}" "$upload_url"
       - name: Upload signed plugin artifact
         uses: https://code.forgejo.org/actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pkl-lsp-jetbrains-${{ github.ref_name }}
-          path: ${{ runner.temp }}/pkl-lsp-jetbrains-signed.zip
+          path: ${{ runner.temp }}/jetbrains-plugin-signed.zip
