@@ -6,6 +6,8 @@ with_docs = true
 publish_crates = true
 with_audit = true
 with_deny = true
+provider = "actions"
+platform = "forgejo"
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"
