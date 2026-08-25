@@ -8,13 +8,13 @@
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://codeberg.org/caniko/pkl-lsp.git"
+    "url": "https://github.com/caniko/pkl-lsp.git"
   },
-  "homepage": "https://codeberg.org/caniko/pkl-lsp",
+  "homepage": "https://github.com/caniko/pkl-lsp",
   "bugs": {
-    "url": "https://codeberg.org/caniko/pkl-lsp/issues"
+    "url": "https://github.com/caniko/pkl-lsp/issues"
   },
-  "qna": "https://codeberg.org/caniko/pkl-lsp/issues",
+  "qna": "https://github.com/caniko/pkl-lsp/issues",
   "engines": {
     "vscode": "^1.92.0"
   },
