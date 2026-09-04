@@ -8,6 +8,7 @@ with_audit = true
 with_deny = true
 provider = "crow"
 platform = "forgejo"
+check_command = "harbor-ci full"
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"

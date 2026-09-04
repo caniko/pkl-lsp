@@ -8,14 +8,16 @@
     flake-utils.url = "github:numtide/flake-utils";
     treefmt-nix.url = "github:numtide/treefmt-nix";
     git-hooks.url = "github:cachix/git-hooks.nix";
-    rs-harbor = {
-      url = "git+https://github.com/caniko/rs-harbor.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
+    harbor-rs = {
+      url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.crane.follows = "crane";
       inputs.rust-overlay.follows = "rust-overlay";
       inputs.flake-utils.follows = "flake-utils";
     };
-    rs-harbor-macos-sdk-pin.url = "git+https://github.com/caniko/rs-harbor-macos-sdk-pin.git";
+    rs-harbor.follows = "harbor-rs";
+    harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git";
+    rs-harbor-macos-sdk-pin.follows = "harbor-macos-sdk-pin";
   };
 
   outputs = {
@@ -26,8 +28,8 @@
     flake-utils,
     treefmt-nix,
     git-hooks,
-    rs-harbor,
-    rs-harbor-macos-sdk-pin,
+    harbor-rs,
+    harbor-macos-sdk-pin,
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
@@ -36,7 +38,7 @@
         overlays = [(import rust-overlay)];
       };
 
-      toolchain = rs-harbor.lib.mkToolchain {
+      toolchain = harbor-rs.lib.mkToolchain {
         inherit pkgs;
         toolchainProfile = "nightly";
         extensions = ["rustfmt" "clippy"];
@@ -51,11 +53,11 @@
         ];
       };
       inherit (toolchain) rustToolchain craneLib;
-      cross = rs-harbor.lib.mkCross {
+      cross = harbor-rs.lib.mkCross {
         inherit pkgs system;
-        macosSdkStorePath = rs-harbor-macos-sdk-pin.storePath;
-        macosSdkOutputHash = rs-harbor-macos-sdk-pin.outputHash;
-        osxSdkVersion = rs-harbor-macos-sdk-pin.sdkVersion;
+        macosSdkStorePath = harbor-macos-sdk-pin.storePath;
+        macosSdkOutputHash = harbor-macos-sdk-pin.outputHash;
+        osxSdkVersion = harbor-macos-sdk-pin.sdkVersion;
       };
       src = craneLib.cleanCargoSource ./.;
       commonArgs = {
@@ -70,7 +72,7 @@
         // {
           cargoExtraArgs = "-p pkl-lsp-server";
         };
-      serverPackages = rs-harbor.lib.mkCrossPackages {
+      serverPackages = harbor-rs.lib.mkCrossPackages {
         inherit pkgs cross;
         inherit (toolchain) craneLib;
         pname = "pkl-lsp-server";
@@ -136,7 +138,7 @@
         cp ${serverPackages.pkl-lsp-server-darwin-x86_64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-x64/pkl-lsp"
         cp ${serverPackages.pkl-lsp-server-darwin-aarch64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-arm64/pkl-lsp"
       '';
-      jetbrainsPlugin = rs-harbor.lib.mkJetBrainsPlugin {
+      jetbrainsPlugin = harbor-rs.lib.mkJetBrainsPlugin {
         inherit pkgs;
         pname = "pkl-lsp-jetbrains";
         version = "0.2.1";
@@ -194,7 +196,7 @@
       devShells = let
         defaultShell = craneLib.devShell {
           checks = self.checks.${system};
-           packages = [rs-harbor.packages.${system}.harbor-ci] ++ (with pkgs;
+           packages = [harbor-rs.packages.${system}.harbor-ci] ++ (with pkgs;
              [
               cargo-about
               cargo-audit
