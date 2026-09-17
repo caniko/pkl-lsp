@@ -15,9 +15,7 @@
       inputs.rust-overlay.follows = "rust-overlay";
       inputs.flake-utils.follows = "flake-utils";
     };
-    rs-harbor.follows = "harbor-rs";
     harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git";
-    rs-harbor-macos-sdk-pin.follows = "harbor-macos-sdk-pin";
   };
 
   outputs = {
