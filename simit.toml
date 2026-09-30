@@ -1,17 +1,17 @@
 [ci]
 runtime = "nix"
-runner = "codefloe-global"
+runner = "ubuntu-24.04"
 workspace = true
 with_docs = true
 publish_crates = true
 with_audit = true
 with_deny = true
-provider = "crow"
-platform = "forgejo"
+provider = "actions"
+platform = "github"
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"
-runner = "atlas-nix-trusted"
+runner = "ubuntu-24.04"
 codeberg_repo = "caniko/pkl-lsp"
 codeberg_token_secret = "codeberg_token"
 pat_source = "file-env"
@@ -52,7 +52,7 @@ nix develop -c npm audit --omit=dev --audit-level=moderate
 plugin_dir = "pkl-lsp-jetbrains"
 plugin_xml_id = "com.tartanoglu.pkl-lsp"
 package_installable = ".#jetbrains-plugin"
-runner = "atlas-nix-trusted"
+runner = "ubuntu-24.04"
 cargo_package = "pkl-lsp-server"
 credential_source = "file-env"
 marketplace_token_file_env = "JETBRAINS_MARKETPLACE_TOKEN_FILE"
