@@ -381,7 +381,7 @@ impl WorkspaceIndex {
             let detail = property.type_ann.as_ref().map(type_expr_label);
             self.symbols.push(PklSymbol {
                 uri: document.uri.clone(),
-                name: property.name.clone(),
+                name: property.name.to_string(),
                 kind: SymbolKind::Property,
                 range: token_range(token),
                 selection_range: token_range(token),
