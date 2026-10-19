@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-darwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
     flake-utils.url = "github:numtide/flake-utils";
@@ -15,12 +16,13 @@
       inputs.rust-overlay.follows = "rust-overlay";
       inputs.flake-utils.follows = "flake-utils";
     };
-    rs-harbor-macos-sdk-pin.url = "git+ssh://git@github.com/caniko/harbor-macos-sdk-pin.git";
+    rs-harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor.git?dir=components/macos-sdk&ref=feat/harbor-monorepo-components&rev=7d99eb50c52d0a941e2996b97c469b32a7657ef4";
   };
 
   outputs = {
     self,
     nixpkgs,
+    nixpkgs-darwin,
     rust-overlay,
     crane,
     flake-utils,
@@ -31,10 +33,15 @@
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [(import rust-overlay)];
-      };
+      pkgs =
+        import (
+          if system == "x86_64-darwin"
+          then nixpkgs-darwin
+          else nixpkgs
+        ) {
+          inherit system;
+          overlays = [(import rust-overlay)];
+        };
 
       toolchain = rs-harbor.lib.mkToolchain {
         inherit pkgs;
@@ -212,7 +219,6 @@
               wasm-pack
               pre-commit
               rpm
-              debootstrap
               gradle_9
               jdk21
               util-linux
@@ -220,6 +226,7 @@
               rust-analyzer
               taplo
             ]
+            ++ lib.optional stdenv.hostPlatform.isLinux debootstrap
             ++ pre-commit-check.enabledPackages;
           shellHook = pre-commit-check.shellHook;
         };

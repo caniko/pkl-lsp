@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Require published Pklr 5.2.0 while retaining parser-only dependencies and owned
+  language-server symbol names.
+
+### Fixed
+
+- Read the unchanged macOS SDK pin from its public Harbor source.
+- Keep macOS development shells evaluable: use maintained Nixpkgs 26.05 for Intel
+  macOS and include `debootstrap` only on Linux.
+
 ## [0.2.1] - 2026-07-16
 
 ### Changed
