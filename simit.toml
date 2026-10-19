@@ -1,13 +1,13 @@
 [ci]
 runtime = "nix"
-runner = "codefloe-global"
+runner = "ubuntu-24.04"
 workspace = true
 with_docs = true
 publish_crates = true
 with_audit = true
 with_deny = true
-provider = "crow"
-platform = "forgejo"
+provider = "actions"
+platform = "github"
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"
