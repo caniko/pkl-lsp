@@ -2,19 +2,13 @@
   description = "pkl-lsp — Rust/WASM language server and editor plugin for PKL";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    crane.url = "github:ipetkov/crane";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
+    nixpkgs.follows = "harbor-rs/nixpkgs";
+    rust-overlay.follows = "harbor-rs/rust-overlay";
+    crane.follows = "harbor-rs/crane";
+    treefmt-nix.follows = "harbor-rs/treefmt-nix";
+    git-hooks.follows = "harbor-rs/git-hooks";
     flake-utils.url = "github:numtide/flake-utils";
-    treefmt-nix.url = "github:numtide/treefmt-nix";
-    git-hooks.url = "github:cachix/git-hooks.nix";
-    harbor-rs = {
-      url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=fac8049316846e0ef1c1e6acd92aed7a337b333a";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.crane.follows = "crane";
-      inputs.rust-overlay.follows = "rust-overlay";
-      inputs.flake-utils.follows = "flake-utils";
-    };
     harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git";
   };
 
@@ -30,7 +24,7 @@
     harbor-macos-sdk-pin,
     ...
   }:
-    flake-utils.lib.eachDefaultSystem (system: let
+    flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         overlays = [(import rust-overlay)];
@@ -171,15 +165,15 @@
         jetbrains-plugin = jetbrainsPlugin;
       };
       formatter = treefmtEval.config.build.wrapper;
+      # Darwin servers (and the JetBrains plugin that bundles them) need the
+      # private macOS SDK cache, so they stay packages rather than checks that
+      # hosted CI must build.
       checks = {
         default = package;
         pkl-lsp-server-linux-x64 = package;
         pkl-lsp-server-linux-arm64 = serverPackages.pkl-lsp-server-aarch64-linux;
         pkl-lsp-server-win32-x64 = serverPackages.pkl-lsp-server-windows;
-        pkl-lsp-server-darwin-x64 = serverPackages.pkl-lsp-server-darwin-x86_64;
-        pkl-lsp-server-darwin-arm64 = serverPackages.pkl-lsp-server-darwin-aarch64;
         wasm = wasmCheck;
-        jetbrains-plugin = jetbrainsPlugin;
         formatting = treefmtEval.config.build.check self;
         clippy = craneLib.cargoClippy (commonArgs
           // {
@@ -193,34 +187,35 @@
       };
       devShells = let
         defaultShell = craneLib.devShell {
-          checks = self.checks.${system};
-           packages = [harbor-rs.packages.${system}.harbor-ci] ++ (with pkgs;
-             [
-              cargo-about
-              cargo-audit
-              cargo-cyclonedx
-              cargo-deny
-              cargo-llvm-cov
-              cargo-sbom
-              cargo-nextest
-              binaryen
-              cosign
-              curl
-              jq
-              minisign
-              nodejs
-              wasm-pack
-              pre-commit
-              rpm
-              debootstrap
-              gradle_9
-              jdk21
-              util-linux
-              reprepro
-              rust-analyzer
-              taplo
-             ]
-             ++ pre-commit-check.enabledPackages);
+          packages =
+            [harbor-rs.packages.${system}.harbor-ci]
+            ++ (with pkgs;
+              [
+                cargo-about
+                cargo-audit
+                cargo-cyclonedx
+                cargo-deny
+                cargo-llvm-cov
+                cargo-sbom
+                cargo-nextest
+                binaryen
+                cosign
+                curl
+                jq
+                minisign
+                nodejs
+                wasm-pack
+                pre-commit
+                rpm
+                gradle_9
+                jdk21
+                util-linux
+                reprepro
+                rust-analyzer
+                taplo
+              ]
+              ++ lib.optional stdenv.hostPlatform.isLinux debootstrap
+              ++ pre-commit-check.enabledPackages);
           shellHook = pre-commit-check.shellHook;
         };
       in {
