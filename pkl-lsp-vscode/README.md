@@ -24,4 +24,4 @@ The Rust workspace consumes `pklr`'s registry-published parser-only feature.
 ## Repository
 
 Source, issues, and release notes live at
-<https://codeberg.org/caniko/pkl-lsp>.
+<https://github.com/caniko/pkl-lsp>.
