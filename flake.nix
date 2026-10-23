@@ -2,20 +2,14 @@
   description = "pkl-lsp — Rust/WASM language server and editor plugin for PKL";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    crane.url = "github:ipetkov/crane";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
+    nixpkgs.follows = "harbor-rs/nixpkgs";
+    rust-overlay.follows = "harbor-rs/rust-overlay";
+    crane.follows = "harbor-rs/crane";
+    treefmt-nix.follows = "harbor-rs/treefmt-nix";
+    git-hooks.follows = "harbor-rs/git-hooks";
     flake-utils.url = "github:numtide/flake-utils";
-    treefmt-nix.url = "github:numtide/treefmt-nix";
-    git-hooks.url = "github:cachix/git-hooks.nix";
-    rs-harbor = {
-      url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.crane.follows = "crane";
-      inputs.rust-overlay.follows = "rust-overlay";
-      inputs.flake-utils.follows = "flake-utils";
-    };
-    rs-harbor-macos-sdk-pin.url = "git+ssh://git@github.com/caniko/harbor-macos-sdk-pin.git";
+    harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git";
   };
 
   outputs = {
@@ -26,19 +20,19 @@
     flake-utils,
     treefmt-nix,
     git-hooks,
-    rs-harbor,
-    rs-harbor-macos-sdk-pin,
+    harbor-rs,
+    harbor-macos-sdk-pin,
     ...
   }:
-    flake-utils.lib.eachDefaultSystem (system: let
+    flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         overlays = [(import rust-overlay)];
       };
 
-      toolchain = rs-harbor.lib.mkToolchain {
+      toolchain = harbor-rs.lib.mkToolchain {
         inherit pkgs;
-        channel = "stable";
+        toolchainProfile = "nightly";
         extensions = ["rustfmt" "clippy"];
         withRustAnalyzer = false;
         crossTargets = [
@@ -51,11 +45,11 @@
         ];
       };
       inherit (toolchain) rustToolchain craneLib;
-      cross = rs-harbor.lib.mkCross {
+      cross = harbor-rs.lib.mkCross {
         inherit pkgs system;
-        macosSdkStorePath = rs-harbor-macos-sdk-pin.storePath;
-        macosSdkOutputHash = rs-harbor-macos-sdk-pin.outputHash;
-        osxSdkVersion = rs-harbor-macos-sdk-pin.sdkVersion;
+        macosSdkStorePath = harbor-macos-sdk-pin.storePath;
+        macosSdkOutputHash = harbor-macos-sdk-pin.outputHash;
+        osxSdkVersion = harbor-macos-sdk-pin.sdkVersion;
       };
       src = craneLib.cleanCargoSource ./.;
       commonArgs = {
@@ -70,7 +64,7 @@
         // {
           cargoExtraArgs = "-p pkl-lsp-server";
         };
-      serverPackages = rs-harbor.lib.mkCrossPackages {
+      serverPackages = harbor-rs.lib.mkCrossPackages {
         inherit pkgs cross;
         inherit (toolchain) craneLib;
         pname = "pkl-lsp-server";
@@ -136,7 +130,7 @@
         cp ${serverPackages.pkl-lsp-server-darwin-x86_64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-x64/pkl-lsp"
         cp ${serverPackages.pkl-lsp-server-darwin-aarch64}/bin/pkl-lsp "$out/src/main/resources/servers/darwin-arm64/pkl-lsp"
       '';
-      jetbrainsPlugin = rs-harbor.lib.mkJetBrainsPlugin {
+      jetbrainsPlugin = harbor-rs.lib.mkJetBrainsPlugin {
         inherit pkgs;
         pname = "pkl-lsp-jetbrains";
         version = "0.2.1";
@@ -171,15 +165,15 @@
         jetbrains-plugin = jetbrainsPlugin;
       };
       formatter = treefmtEval.config.build.wrapper;
+      # Darwin servers (and the JetBrains plugin that bundles them) need the
+      # private macOS SDK cache, so they stay packages rather than checks that
+      # hosted CI must build.
       checks = {
         default = package;
         pkl-lsp-server-linux-x64 = package;
         pkl-lsp-server-linux-arm64 = serverPackages.pkl-lsp-server-aarch64-linux;
         pkl-lsp-server-win32-x64 = serverPackages.pkl-lsp-server-windows;
-        pkl-lsp-server-darwin-x64 = serverPackages.pkl-lsp-server-darwin-x86_64;
-        pkl-lsp-server-darwin-arm64 = serverPackages.pkl-lsp-server-darwin-aarch64;
         wasm = wasmCheck;
-        jetbrains-plugin = jetbrainsPlugin;
         formatting = treefmtEval.config.build.check self;
         clippy = craneLib.cargoClippy (commonArgs
           // {
@@ -193,34 +187,35 @@
       };
       devShells = let
         defaultShell = craneLib.devShell {
-          checks = self.checks.${system};
-          packages = with pkgs;
-            [
-              cargo-about
-              cargo-audit
-              cargo-cyclonedx
-              cargo-deny
-              cargo-llvm-cov
-              cargo-sbom
-              cargo-nextest
-              binaryen
-              cosign
-              curl
-              jq
-              minisign
-              nodejs
-              wasm-pack
-              pre-commit
-              rpm
-              debootstrap
-              gradle_9
-              jdk21
-              util-linux
-              reprepro
-              rust-analyzer
-              taplo
-            ]
-            ++ pre-commit-check.enabledPackages;
+          packages =
+            [harbor-rs.packages.${system}.harbor-ci]
+            ++ (with pkgs;
+              [
+                cargo-about
+                cargo-audit
+                cargo-cyclonedx
+                cargo-deny
+                cargo-llvm-cov
+                cargo-sbom
+                cargo-nextest
+                binaryen
+                cosign
+                curl
+                jq
+                minisign
+                nodejs
+                wasm-pack
+                pre-commit
+                rpm
+                gradle_9
+                jdk21
+                util-linux
+                reprepro
+                rust-analyzer
+                taplo
+              ]
+              ++ lib.optional stdenv.hostPlatform.isLinux debootstrap
+              ++ pre-commit-check.enabledPackages);
           shellHook = pre-commit-check.shellHook;
         };
       in {

@@ -344,7 +344,7 @@ impl WorkspaceIndex {
                         });
                     }
                 }
-                Entry::DynProperty(key, value) => {
+                Entry::DynProperty(key, value) | Entry::Predicate(key, value) => {
                     collect_expr(cursor, key);
                     collect_expr(cursor, value);
                 }
@@ -358,6 +358,8 @@ impl WorkspaceIndex {
                     }
                 }
                 Entry::Spread(expr) | Entry::Elem(expr) => collect_expr(cursor, expr),
+                // ponytail: future entry kinds have no symbol model; add explicit visitor arms as supported.
+                _ => {}
             }
         }
     }
@@ -379,7 +381,7 @@ impl WorkspaceIndex {
             let detail = property.type_ann.as_ref().map(type_expr_label);
             self.symbols.push(PklSymbol {
                 uri: document.uri.clone(),
-                name: property.name.clone(),
+                name: property.name.to_string(),
                 kind: SymbolKind::Property,
                 range: token_range(token),
                 selection_range: token_range(token),
@@ -424,6 +426,12 @@ fn error_to_diagnostic(uri: &str, text: &str, error: PklError) -> PklDiagnostic 
             uri: uri.to_string(),
             range: position_range(0, 0, 0, 1),
             message: message.clone(),
+            source: DiagnosticSource::Eval,
+        },
+        _ => PklDiagnostic {
+            uri: uri.to_string(),
+            range: position_range(0, 0, 0, 1),
+            message: error.to_string(),
             source: DiagnosticSource::Eval,
         },
     }
@@ -593,6 +601,7 @@ fn type_expr_label(ty: &TypeExpr) -> String {
             )
         }
         TypeExpr::Constrained(name, _) => format!("{name}(...)"),
+        _ => format!("{ty:?}"),
     }
 }
 
@@ -626,15 +635,15 @@ mod tests {
             uri: "file:///demo.pkl".to_string(),
             version: 1,
             text: r#"
-import "base.pkl" as base
 amends "parent.pkl"
+import "base.pkl" as base
 
 @Deprecated { message = "old" }
-class AppConfig {
+local class AppConfig {
   name: String = "demo"
 }
 
-typealias Name = String
+local typealias Name = String
 "#
             .to_string(),
         };
@@ -679,5 +688,23 @@ typealias Name = String
         let index = WorkspaceIndex::build([&document]);
         assert_eq!(index.diagnostics.len(), 1);
         assert_eq!(index.diagnostics[0].range.start.line, 0);
+    }
+
+    #[test]
+    fn indexes_symbols_after_member_predicates() {
+        let document = Document {
+            uri: "file:///predicates.pkl".to_string(),
+            version: 1,
+            text: "values { [[true]] = 1 }\nafter: String = \"ok\"".to_string(),
+        };
+
+        let index = WorkspaceIndex::build([&document]);
+        assert!(index.diagnostics.is_empty(), "{:?}", index.diagnostics);
+        assert!(
+            index
+                .symbols
+                .iter()
+                .any(|symbol| symbol.name == "after" && symbol.detail.as_deref() == Some("String"))
+        );
     }
 }

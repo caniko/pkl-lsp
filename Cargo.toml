@@ -29,13 +29,20 @@ include = [
   "/LICENSE-APACHE",
 ]
 
+[workspace.metadata.harbor-ci]
+all-features = false
+docs = true
+audit = true
+deny = true
+package = true
+
 [workspace.dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 console_error_panic_hook = "0.1"
 futures = "0.3"
 lsp-types = "0.97"
-pklr = { version = "1.2.0", default-features = false, features = ["parse"] }
+pklr = { version = "5.2.0", default-features = false }
 rkyv = { version = "0.8", features = ["bytecheck"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

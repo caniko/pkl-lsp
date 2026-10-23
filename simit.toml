@@ -1,13 +1,22 @@
 [ci]
 runtime = "nix"
-runner = "codefloe-global"
+runner = "ubuntu-24.04"
 workspace = true
 with_docs = true
 publish_crates = true
 with_audit = true
 with_deny = true
-provider = "crow"
-platform = "forgejo"
+provider = "actions"
+platform = "github"
+publish_strategy = "members"
+
+# Public caches only; the private macOS SDK cache is a prebuild/release concern.
+[ci.cache]
+substituters = ["https://attic.candee.baby/canix", "https://cache.nixos.org"]
+trusted_public_keys = [
+  "canix:lPzPzKrmYqW5Rxa5r0uQWvCqD3S5nx0h2eCy7XD5JM8=",
+  "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=",
+]
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"
@@ -60,3 +69,26 @@ certificate_chain_file_env = "JETBRAINS_CERTIFICATE_CHAIN_FILE"
 private_key_file_env = "JETBRAINS_PRIVATE_KEY_FILE"
 private_key_password_file_env = "JETBRAINS_PRIVATE_KEY_PASSWORD_FILE"
 prepublish_commands = ["nix flake check --no-build"]
+
+# Hosted coverage for the outputs that need the private macOS SDK cache:
+# the darwin servers and the JetBrains plugin that bundles them.
+[prebuild]
+nix_builds = [
+  ".#packages.x86_64-linux.pkl-lsp-server-darwin-x64",
+  ".#packages.x86_64-linux.pkl-lsp-server-darwin-arm64",
+  ".#packages.x86_64-linux.jetbrains-plugin",
+]
+system_runners = { x86_64-linux = "ubuntu-24.04" }
+
+[release.artifacts]
+netrc_secret = "HARBOR_MACOS_SDK_NETRC"
+substituters = [
+  "https://attic.candee.baby/canix",
+  "https://attic.candee.baby/harbor-macos-sdk",
+  "https://cache.nixos.org",
+]
+trusted_public_keys = [
+  "canix:lPzPzKrmYqW5Rxa5r0uQWvCqD3S5nx0h2eCy7XD5JM8=",
+  "harbor-macos-sdk:MLRX9qZASKwDh48UWON67cvYxfEbqvjfIZQmGwt1v1E=",
+  "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=",
+]
