@@ -232,15 +232,16 @@
     },
     "harbor-macos-sdk-pin": {
       "locked": {
-        "lastModified": 1787618908,
-        "narHash": "sha256-z1tAA9/mesa1/mcMcPQXOBwkZH2JEELfpfcaiz+o9Gc=",
-        "ref": "refs/heads/trunk",
-        "rev": "7d78e7f87ce5f800ea3e329af1138cd3ee54e12f",
-        "revCount": 8,
+        "lastModified": 1791442905,
+        "narHash": "sha256-sNh6JpHuvsD1dJs+/pyjbGE3SHpJ0J9VCu1/22KjH2A=",
+        "ref": "trunk",
+        "rev": "9762fd3652db7ebb3f92db8ad18b6e3253097f58",
+        "revCount": 11,
         "type": "git",
         "url": "https://github.com/caniko/harbor-macos-sdk-pin.git"
       },
       "original": {
+        "ref": "trunk",
         "type": "git",
         "url": "https://github.com/caniko/harbor-macos-sdk-pin.git"
       }
@@ -278,6 +279,7 @@
         "harbor-android": "harbor-android",
         "harbor-meta": "harbor-meta",
         "nix-bundle": "nix-bundle",
+        "nix-cache-pin": "nix-cache-pin",
         "nix-opencode-lsp": "nix-opencode-lsp",
         "nixpkgs": "nixpkgs",
         "osxcross": "osxcross",
@@ -285,11 +287,11 @@
         "treefmt-nix": "treefmt-nix_3"
       },
       "locked": {
-        "lastModified": 1792694429,
-        "narHash": "sha256-ha7R0vyOBnvIfeETI3v5XGEoe7qBXctLX/4dY/CnxmE=",
+        "lastModified": 1792775513,
+        "narHash": "sha256-F5i5n8Zbq82osmTJXeJL3KI74LyTL4YNGfUBadgoBh0=",
         "ref": "trunk",
-        "rev": "fcc3d75f1c6c3a277381cfc2768d4040e3a3bdb7",
-        "revCount": 285,
+        "rev": "088186303fc68c839c047549c471874654e07bd4",
+        "revCount": 293,
         "type": "git",
         "url": "https://github.com/caniko/harbor-rs.git"
       },
@@ -318,6 +320,23 @@
       "original": {
         "owner": "nix-community",
         "repo": "nix-bundle",
+        "type": "github"
+      }
+    },
+    "nix-cache-pin": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792571507,
+        "narHash": "sha256-8DdsRc5/cgwAtlHYEicNsMPgNCHR8qT/aurDteVkuQw=",
+        "owner": "caniko",
+        "repo": "nix-cache-pin",
+        "rev": "a69647e9be1afe5f9973732b9286b4e7de3b31b4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "caniko",
+        "ref": "0.3.0",
+        "repo": "nix-cache-pin",
         "type": "github"
       }
     },

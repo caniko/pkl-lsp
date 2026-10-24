@@ -9,7 +9,7 @@
     treefmt-nix.follows = "harbor-rs/treefmt-nix";
     git-hooks.follows = "harbor-rs/git-hooks";
     flake-utils.url = "github:numtide/flake-utils";
-    harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git";
+    harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git?ref=trunk";
   };
 
   outputs = {
