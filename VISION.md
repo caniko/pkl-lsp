@@ -65,5 +65,6 @@ closing the OpenCode integration gaps listed above.
 
 Canix ships composable OpenCode LSP shells whose `pkl` profile supplies this
 server, so agents editing Canix's Pkl data get diagnostics inside OpenCode. The
-repository is also a Simit updater target and is included in atlas maintenance
-sweeps.
+repository is also enrolled as a Simit updater target — currently disabled in
+atlas fleet policy pending reconciliation of local CI/template edits — and is
+included in atlas maintenance sweeps.
