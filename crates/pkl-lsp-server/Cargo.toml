@@ -34,3 +34,32 @@ lsp-types.workspace = true
 pkl-lsp-core = { version = "0.2", path = "../pkl-lsp-core" }
 serde_json.workspace = true
 tokio.workspace = true
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-aarch64-apple-darwin.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "bin/{ bin }{ binary-ext }"
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-aarch64-unknown-linux-musl.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "bin/{ bin }{ binary-ext }"
+[package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-aarch64-unknown-linux-musl.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "bin/{ bin }{ binary-ext }"
+[package.metadata.binstall.overrides.x86_64-pc-windows-gnu]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-x86_64-pc-windows-gnu.zip"
+pkg-fmt = "zip"
+bin-dir = "bin/{ bin }{ binary-ext }"
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-x86_64-pc-windows-gnu.zip"
+pkg-fmt = "zip"
+bin-dir = "bin/{ bin }{ binary-ext }"
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-x86_64-unknown-linux-musl.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "bin/{ bin }{ binary-ext }"
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/{ version }/pkl-lsp-server-{ version }-x86_64-unknown-linux-musl.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "bin/{ bin }{ binary-ext }"

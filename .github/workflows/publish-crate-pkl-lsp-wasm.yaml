@@ -150,6 +150,8 @@ jobs:
           nix develop -c cargo package --locked --allow-dirty --no-verify -p pkl-lsp-wasm --target-dir "$RUNNER_TEMP/simit-package-target"
           mkdir -p "$RUNNER_TEMP/simit-crates/pkl-lsp-wasm"
           cp "$RUNNER_TEMP/simit-package-target/package/pkl-lsp-wasm-$version.crate" "$RUNNER_TEMP/simit-crates/pkl-lsp-wasm/"
+          size="$(wc -c < "$RUNNER_TEMP/simit-crates/pkl-lsp-wasm/pkl-lsp-wasm-$version.crate")"
+          test "$size" -le 10485760 || { echo "crate pkl-lsp-wasm archive is $size bytes, over the crates.io upload limit of 10485760 bytes (10 MiB)" >&2; exit 1; }
       - name: Retain original-run archive pkl-lsp-wasm
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
