@@ -2,12 +2,19 @@
   description = "pkl-lsp — Rust/WASM language server and editor plugin for PKL";
 
   inputs = {
-    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=0d53ee174d64cdebf22666691a7e8a99b2eb8cc6";
     nixpkgs.follows = "harbor-rs/nixpkgs";
     rust-overlay.follows = "harbor-rs/rust-overlay";
     crane.follows = "harbor-rs/crane";
-    treefmt-nix.follows = "harbor-rs/treefmt-nix";
-    git-hooks.follows = "harbor-rs/git-hooks";
+    # harbor-rs no longer re-exports these, so they are direct inputs.
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
     harbor-macos-sdk-pin.url = "git+https://github.com/caniko/harbor-macos-sdk-pin.git?ref=trunk";
   };
@@ -87,6 +94,16 @@
         };
       };
       package = serverPackages.pkl-lsp-server;
+      # cargo-binstall archives for the published binary crate: static musl
+      # Linux (x86_64 + aarch64) and Windows from x86_64-linux, native on macOS.
+      binstallRelease = harbor-rs.lib.mkBinstallRelease {
+        inherit pkgs system cross;
+        pname = "pkl-lsp-server";
+        version = "0.2.1";
+        commonArgs = serverCommonArgs;
+        toolchainArgs = {toolchainProfile = "nightly";};
+        crates.pkl-lsp-server.cargoToml = ./crates/pkl-lsp-server/Cargo.toml;
+      };
       wasmArtifacts = craneLib.buildDepsOnly (commonArgs
         // {
           cargoExtraArgs = "-p pkl-lsp-wasm";
@@ -153,42 +170,49 @@
         };
       };
     in {
-      packages = {
-        default = package;
-        pkl-lsp = package;
-        pkl-lsp-server-linux-x64 = package;
-        pkl-lsp-server-linux-arm64 = serverPackages.pkl-lsp-server-aarch64-linux;
-        pkl-lsp-server-win32-x64 = serverPackages.pkl-lsp-server-windows;
-        pkl-lsp-server-darwin-x64 = serverPackages.pkl-lsp-server-darwin-x86_64;
-        pkl-lsp-server-darwin-arm64 = serverPackages.pkl-lsp-server-darwin-aarch64;
-        vscode-extension-source = vscodeExtensionSource;
-        jetbrains-plugin = jetbrainsPlugin;
-      };
+      packages =
+        {
+          default = package;
+          pkl-lsp = package;
+          pkl-lsp-server-linux-x64 = package;
+          pkl-lsp-server-linux-arm64 = serverPackages.pkl-lsp-server-aarch64-linux;
+          pkl-lsp-server-win32-x64 = serverPackages.pkl-lsp-server-windows;
+          pkl-lsp-server-darwin-x64 = serverPackages.pkl-lsp-server-darwin-x86_64;
+          pkl-lsp-server-darwin-arm64 = serverPackages.pkl-lsp-server-darwin-aarch64;
+          vscode-extension-source = vscodeExtensionSource;
+          jetbrains-plugin = jetbrainsPlugin;
+        }
+        // pkgs.lib.optionalAttrs (binstallRelease.releaseBundle != null) {
+          release-bundle = binstallRelease.releaseBundle;
+        };
       formatter = treefmtEval.config.build.wrapper;
       # Darwin servers (and the JetBrains plugin that bundles them) need the
       # private macOS SDK cache, so they stay packages rather than checks that
       # hosted CI must build.
-      checks = {
-        default = package;
-        pkl-lsp-server-linux-x64 = package;
-        pkl-lsp-server-linux-arm64 = serverPackages.pkl-lsp-server-aarch64-linux;
-        pkl-lsp-server-win32-x64 = serverPackages.pkl-lsp-server-windows;
-        wasm = wasmCheck;
-        formatting = treefmtEval.config.build.check self;
-        clippy = craneLib.cargoClippy (commonArgs
-          // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets --all-features -- --deny warnings";
-          });
-        fmt = craneLib.cargoFmt {
-          inherit src;
-          pname = "pkl-lsp";
-        };
-      };
+      checks =
+        {
+          default = package;
+          pkl-lsp-server-linux-x64 = package;
+          pkl-lsp-server-linux-arm64 = serverPackages.pkl-lsp-server-aarch64-linux;
+          pkl-lsp-server-win32-x64 = serverPackages.pkl-lsp-server-windows;
+          wasm = wasmCheck;
+          formatting = treefmtEval.config.build.check self;
+          clippy = craneLib.cargoClippy (commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets --all-features -- --deny warnings";
+            });
+          fmt = craneLib.cargoFmt {
+            inherit src;
+            pname = "pkl-lsp";
+          };
+        }
+        // binstallRelease.checks;
       devShells = let
         defaultShell = craneLib.devShell {
           packages =
-            [harbor-rs.packages.${system}.harbor-ci]
+            # harbor-rs ships harbor-ci on Linux only.
+            pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux harbor-rs.packages.${system}.harbor-ci
             ++ (with pkgs;
               [
                 cargo-about

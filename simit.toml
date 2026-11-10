@@ -80,7 +80,20 @@ nix_builds = [
 ]
 system_runners = { x86_64-linux = "ubuntu-24.04" }
 
+[release.github]
+repo = "caniko/pkl-lsp"
+target_branch = "trunk"
+
 [release.artifacts]
+runner = "ubuntu-24.04"
+# Prebuilt cargo-binstall archives: musl Linux (x86_64 + aarch64) and Windows
+# from x86_64-linux, native on macOS. One job per system, merged into the
+# single release; `simit binstall sync` keeps the crate metadata equal.
+prebuild_binaries = true
+binstall = true
+system_runners = { x86_64-linux = "ubuntu-24.04", aarch64-darwin = "macos-15" }
+# No keys/minisign.pub trust root in this repository.
+sign = false
 netrc_secret = "HARBOR_MACOS_SDK_NETRC"
 substituters = [
   "https://attic.candee.baby/canix",
