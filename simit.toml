@@ -92,8 +92,9 @@ runner = "ubuntu-24.04"
 prebuild_binaries = true
 binstall = true
 system_runners = { x86_64-linux = "ubuntu-24.04", aarch64-darwin = "macos-15" }
-# No keys/minisign.pub trust root in this repository.
-sign = false
+# Sign SHA256SUMS.txt with the maintainer minisign key in keys/minisign.pub;
+# the release workflow reads MINISIGN_SECRET_KEY and MINISIGN_PASSWORD.
+sign = true
 netrc_secret = "HARBOR_MACOS_SDK_NETRC"
 substituters = [
   "https://attic.candee.baby/canix",
