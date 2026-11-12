@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-12
+
+### Fixed
+
+- Release archives: the GitHub release now builds and publishes the signed
+  cargo-binstall archives (the previous tag's release workflow failed).
+- Workspace members publish from one coordinated workflow in dependency order,
+  so the trusted publisher reproduces the `pkl-lsp-server` and `pkl-lsp-wasm`
+  archives after `pkl-lsp-core` is live on crates.io.
+
 ## [0.2.2] - 2026-11-11
 
 ### Changed

@@ -310,7 +310,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pkl-lsp-core"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "pklr",
  "rkyv",
@@ -321,7 +321,7 @@ dependencies = [
 
 [[package]]
 name = "pkl-lsp-server"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "pkl-lsp-wasm"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "console_error_panic_hook",
  "pkl-lsp-core",
