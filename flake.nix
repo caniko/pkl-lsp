@@ -62,7 +62,7 @@
       commonArgs = {
         inherit src;
         pname = "pkl-lsp";
-        version = "0.2.2";
+        version = "0.2.3";
         strictDeps = true;
       };
       cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -99,7 +99,7 @@
       binstallRelease = harbor-rs.lib.mkBinstallRelease {
         inherit pkgs system cross;
         pname = "pkl-lsp-server";
-        version = "0.2.2";
+        version = "0.2.3";
         commonArgs = serverCommonArgs;
         toolchainArgs = {toolchainProfile = "nightly";};
         crates.pkl-lsp-server.cargoToml = ./crates/pkl-lsp-server/Cargo.toml;

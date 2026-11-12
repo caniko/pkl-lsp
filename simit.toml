@@ -8,7 +8,7 @@ with_audit = true
 with_deny = true
 provider = "actions"
 platform = "github"
-publish_strategy = "members"
+publish_strategy = "coordinated"
 
 # Public caches only; the private macOS SDK cache is a prebuild/release concern.
 [ci.cache]
