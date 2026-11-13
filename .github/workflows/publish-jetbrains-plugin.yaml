@@ -17,12 +17,16 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: atlas-nix-trusted
+    runs-on: ubuntu-24.04
+    environment:
+      name: simit-marketplace
+    permissions:
+      contents: read
     env:
       NIX_CONFIG: "experimental-features = nix-command flakes"
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
@@ -33,20 +37,29 @@ jobs:
           git config --global --add url.https://github.com/.insteadOf git@github.com:
 
       - name: Validate JetBrains publishing credentials
+        env:
+          MARKETPLACE_TOKEN_FROM_SECRET: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+          CERTIFICATE_CHAIN_FROM_SECRET: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
+          PRIVATE_KEY_FROM_SECRET: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD_FROM_SECRET: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           umask 077
           use_file_env=false
-          if [ -n "${JETBRAINS_MARKETPLACE_TOKEN_FILE:-}" ] && [ -s "${JETBRAINS_MARKETPLACE_TOKEN_FILE}" ] && [ -n "${JETBRAINS_CERTIFICATE_CHAIN_FILE:-}" ] && [ -s "${JETBRAINS_CERTIFICATE_CHAIN_FILE}" ] && [ -n "${JETBRAINS_PRIVATE_KEY_FILE:-}" ] && [ -s "${JETBRAINS_PRIVATE_KEY_FILE}" ] && [ -n "${JETBRAINS_PRIVATE_KEY_PASSWORD_FILE:-}" ] && [ -s "${JETBRAINS_PRIVATE_KEY_PASSWORD_FILE}" ]; then
-            use_file_env=true
+          test -n "${MARKETPLACE_TOKEN_FROM_SECRET}"
+          test -n "${CERTIFICATE_CHAIN_FROM_SECRET}"
+          test -n "${PRIVATE_KEY_FROM_SECRET}"
+          test -n "${PRIVATE_KEY_PASSWORD_FROM_SECRET}"
+          : "${MARKETPLACE_TOKEN_FROM_SECRET}" > "$RUNNER_TEMP/marketplace-token"
+          : "${CERTIFICATE_CHAIN_FROM_SECRET}" > "$RUNNER_TEMP/certificate-chain.pem"
+          : "${PRIVATE_KEY_FROM_SECRET}" > "$RUNNER_TEMP/private-key.pem"
+          : "${PRIVATE_KEY_PASSWORD_FROM_SECRET}" > "$RUNNER_TEMP/private-key-password"
+          if [ "$use_file_env" != true ]; then
+            test -s "$RUNNER_TEMP/marketplace-token"
+            test -s "$RUNNER_TEMP/certificate-chain.pem"
+            test -s "$RUNNER_TEMP/private-key.pem"
+            test -s "$RUNNER_TEMP/private-key-password"
           fi
-          if [ "$use_file_env" = true ]; then
-            cp "${JETBRAINS_MARKETPLACE_TOKEN_FILE}" "$RUNNER_TEMP/marketplace-token"
-            cp "${JETBRAINS_CERTIFICATE_CHAIN_FILE}" "$RUNNER_TEMP/certificate-chain.pem"
-            cp "${JETBRAINS_PRIVATE_KEY_FILE}" "$RUNNER_TEMP/private-key.pem"
-            cp "${JETBRAINS_PRIVATE_KEY_PASSWORD_FILE}" "$RUNNER_TEMP/private-key-password"
-          fi
-          test "$use_file_env" = true
           printf '%s\n' 'JetBrains publishing credentials validated'
 
       - name: Validate plugin version and metadata
@@ -149,7 +162,7 @@ jobs:
           fi
           curl --fail-with-body --retry 3 -X POST -H "Authorization: Bearer $JETBRAINS_MARKETPLACE_TOKEN" "${upload_args[@]}" "$upload_url"
       - name: Upload signed plugin artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pkl-lsp-jetbrains-${{ github.ref_name }}
           path: ${{ runner.temp }}/jetbrains-plugin-signed.zip

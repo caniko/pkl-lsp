@@ -20,12 +20,7 @@ trusted_public_keys = [
 
 [vscode]
 extension_dir = "pkl-lsp-vscode"
-runner = "atlas-nix-trusted"
-codeberg_repo = "caniko/pkl-lsp"
-codeberg_token_secret = "codeberg_token"
-pat_source = "file-env"
-vsce_pat_file_env = "VSCE_PAT_FILE"
-ovsx_pat_file_env = "OVSX_PAT_FILE"
+pat_source = "actions-secret"
 cargo_package = "pkl-lsp-server"
 package_command = "nix run .#package-release-assets -- \"$VERSION\""
 prepublish_commands = [
@@ -61,13 +56,8 @@ nix develop -c npm audit --omit=dev --audit-level=moderate
 plugin_dir = "pkl-lsp-jetbrains"
 plugin_xml_id = "com.tartanoglu.pkl-lsp"
 package_installable = ".#jetbrains-plugin"
-runner = "atlas-nix-trusted"
 cargo_package = "pkl-lsp-server"
-credential_source = "file-env"
-marketplace_token_file_env = "JETBRAINS_MARKETPLACE_TOKEN_FILE"
-certificate_chain_file_env = "JETBRAINS_CERTIFICATE_CHAIN_FILE"
-private_key_file_env = "JETBRAINS_PRIVATE_KEY_FILE"
-private_key_password_file_env = "JETBRAINS_PRIVATE_KEY_PASSWORD_FILE"
+credential_source = "actions-secret"
 prepublish_commands = ["nix flake check --no-build"]
 
 # Hosted coverage for the outputs that need the private macOS SDK cache:
