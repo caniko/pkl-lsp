@@ -20,6 +20,8 @@ evaluator and host-IO dependencies.
 - `pkl-lsp-wasm` - WASM bridge for VS Code web.
 - `pkl-lsp-vscode` - VS Code/Codium extension sources.
 
+See [OpenCode integration gaps](docs/opencode-integration-gaps.md) for native LSP limits.
+
 ## Development
 
 ```sh
