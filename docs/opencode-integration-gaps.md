@@ -1,19 +1,16 @@
-# Opencode Integration Gaps
+# OpenCode integration gaps
 
-This file tracks limitations that matter for opencode's native LSP integration.
-The integration is useful today for opened-document diagnostics and simple
-symbol queries, but the server does not yet provide full workspace semantics.
+OpenCode's native LSP integration supports diagnostics for open files and
+simple symbol queries, not full workspace semantics.
 
-- Workspace indexing only includes opened documents. Opencode will not receive
-  whole-workspace PKL diagnostics until files are read, edited, or otherwise
-  touched by the LSP client.
-- Diagnostics are lex/parse oriented. Evaluator, import, package, and host IO
-  diagnostics are not fully wired through pklr yet.
-- Definitions and references are based on the local symbol/text index, not
-  deterministic semantic resolution across imports and inheritance.
-- `workspace/symbol`, `textDocument/implementation`, and call hierarchy methods
-  are not implemented.
-- Pull diagnostics are not advertised. Clients should rely on
+- The server indexes only open documents. Workspace PKL diagnostics cover only
+  documents in the server's store; the server does not scan the workspace.
+- Diagnostics cover lex/parse errors. Evaluator, import, package, and host IO
+  diagnostics are not fully wired through pklr.
+- Definitions and references use local symbol/text matching, not deterministic
+  semantic resolution across imports and inheritance. The index records import
+  targets but cannot resolve targets outside the document store to document URIs.
+- The native server handles `workspace/symbol`; `textDocument/implementation`
+  reuses type-definition lookup. Call hierarchy is unsupported.
+- The native server advertises pull diagnostics and still sends
   `textDocument/publishDiagnostics` after `didOpen` and `didChange`.
-- Import targets are recorded in the index but not resolved to opened document
-  URIs unless those documents are already present in the document store.
